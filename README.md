@@ -5,15 +5,16 @@ FastAPI backend project using routers.
 ## Project Structure
 
 ```text
-app/
-  main.py
-  api/
-    router.py
-    routes/
-      health.py
-      sensors.py
-  core/
-    config.py
+app.py
+routers/
+  sensors.py
+  supabase_test.py
+services/
+  sensors.py
+  supabase_test.py
+util/
+  config.py
+db/
 ```
 
 ## Setup
@@ -28,17 +29,18 @@ cp .env.example .env
 ## Run
 
 ```bash
-uvicorn app.main:app --reload
+uvicorn app:app --reload
 ```
 
 Or:
 
 ```bash
-python app/main.py
+python app.py
 ```
 
 Open:
 
 - API docs: http://127.0.0.1:8000/docs
-- Health check: http://127.0.0.1:8000/api/v1/health
-- Sensors: http://127.0.0.1:8000/api/v1/sensors
+- Health check: http://127.0.0.1:8000/health
+- Sensors: http://127.0.0.1:8000/api/sensors
+- Supabase test: http://127.0.0.1:8000/api/supabase/test

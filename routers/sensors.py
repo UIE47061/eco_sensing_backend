@@ -1,7 +1,9 @@
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
-router = APIRouter()
+from services.sensors import create_sensor_reading, get_sensor_readings
+
+router = APIRouter(prefix="/api/sensors", tags=["Sensors"])
 
 
 class SensorReadingCreate(BaseModel):
@@ -17,17 +19,9 @@ class SensorReading(SensorReadingCreate):
 
 @router.get("", response_model=list[SensorReading])
 def list_sensor_readings() -> list[SensorReading]:
-    return [
-        SensorReading(
-            id=1,
-            device_id="sensor-001",
-            temperature=26.5,
-            humidity=72.3,
-            co2=420.0,
-        )
-    ]
+    return get_sensor_readings()
 
 
 @router.post("", response_model=SensorReading, status_code=201)
-def create_sensor_reading(payload: SensorReadingCreate) -> SensorReading:
-    return SensorReading(id=1, **payload.model_dump())
+def add_sensor_reading(payload: SensorReadingCreate) -> SensorReading:
+    return create_sensor_reading(payload)
