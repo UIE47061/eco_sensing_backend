@@ -29,12 +29,22 @@ jobs:
             exit 1
           fi
 
-          curl --fail --silent --show-error \
+          HF_STATUS_CODE=$(curl --silent --show-error \
+            --output /dev/null \
+            --write-out "%{http_code}" \
             --header "Authorization: Bearer $HF_TOKEN" \
-            "https://huggingface.co/api/spaces/$HF_SPACE_ID" > /dev/null || {
-              echo "Cannot access Hugging Face Space. Check HF_SPACE_ID, Space existence, and token permissions."
-              exit 1
-            }
+            "https://huggingface.co/api/spaces/$HF_SPACE_ID")
+
+          if [ "$HF_STATUS_CODE" = "401" ] || [ "$HF_STATUS_CODE" = "403" ] || [ "$HF_STATUS_CODE" = "404" ]; then
+            echo "Cannot access Hugging Face Space. Check HF_SPACE_ID, Space existence, and token permissions. HTTP status: $HF_STATUS_CODE"
+            exit 1
+          fi
+
+          if [ "$HF_STATUS_CODE" = "429" ]; then
+            echo "Hugging Face API rate limited the preflight check. Continuing to git push."
+          elif [ "$HF_STATUS_CODE" != "200" ]; then
+            echo "Hugging Face API preflight returned HTTP status: $HF_STATUS_CODE. Continuing to git push."
+          fi
 
           git config --global user.email "actions@github.com"
           git config --global user.name "GitHub Actions"
