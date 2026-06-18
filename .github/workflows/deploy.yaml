@@ -29,6 +29,13 @@ jobs:
             exit 1
           fi
 
+          curl --fail --silent --show-error \
+            --header "Authorization: Bearer $HF_TOKEN" \
+            "https://huggingface.co/api/spaces/$HF_SPACE_ID" > /dev/null || {
+              echo "Cannot access Hugging Face Space. Check HF_SPACE_ID, Space existence, and token permissions."
+              exit 1
+            }
+
           git config --global user.email "actions@github.com"
           git config --global user.name "GitHub Actions"
           
