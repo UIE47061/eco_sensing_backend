@@ -31,6 +31,12 @@ cp .env.example .env
 uvicorn app.main:app --reload
 ```
 
+Or:
+
+```bash
+python app/main.py
+```
+
 Open:
 
 - API docs: http://127.0.0.1:8000/docs
