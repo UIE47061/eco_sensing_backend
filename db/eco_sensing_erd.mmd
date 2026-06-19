@@ -1,0 +1,112 @@
+erDiagram
+  COMPANY ||--o{ DEPARTMENT : has
+  DEPARTMENT ||--o{ EMPLOYEE : contains
+  EMPLOYEE ||--o{ TRAVEL_RECORD : submits
+  EMPLOYEE ||--o{ WASTE_SESSION : opens
+  EMPLOYEE ||--o{ ELEVATOR_TRIP : takes
+  EMPLOYEE ||--o{ DIGITAL_USAGE : generates
+  WASTE_BIN ||--o{ WASTE_SESSION : scanned_in
+  WASTE_BIN ||--o{ WASTE_EVENT : receives
+  WASTE_SESSION ||--o{ WASTE_EVENT : pairs
+  DEVICE ||--o{ WASTE_EVENT : emits
+  EMISSION_FACTOR ||--o{ TRAVEL_RECORD : applies
+  EMISSION_FACTOR ||--o{ WASTE_EVENT : applies
+  EMISSION_FACTOR ||--o{ ELEVATOR_TRIP : applies
+  EMISSION_FACTOR ||--o{ DIGITAL_USAGE : applies
+  EMPLOYEE {
+    uuid id PK
+    uuid department_id FK
+    string id_token
+    string display_name
+    string email
+    int level
+    int carbon_coin
+  }
+  DEPARTMENT {
+    uuid id PK
+    uuid company_id FK
+    string name
+    string primary_metric
+  }
+  COMPANY {
+    uuid id PK
+    string name
+    int baseline_year
+    int net_zero_year
+  }
+  TRAVEL_RECORD {
+    uuid id PK
+    uuid employee_id FK
+    uuid factor_id FK
+    string track_type
+    string transport_mode
+    string origin
+    string destination
+    date travel_date
+    decimal amount
+    decimal distance_km
+    decimal co2e_kg
+    string receipt_id
+    string status
+  }
+  WASTE_SESSION {
+    uuid id PK
+    uuid employee_id FK
+    uuid bin_id FK
+    timestamp scan_at
+    timestamp confirm_at
+    string status
+    bool lock_held
+  }
+  WASTE_EVENT {
+    uuid id PK
+    uuid bin_id FK
+    uuid session_id FK
+    uuid device_id FK
+    uuid factor_id FK
+    timestamp event_at
+    string waste_type
+    decimal confidence
+    decimal weight_g
+    decimal co2e_kg
+  }
+  WASTE_BIN {
+    uuid id PK
+    string qr_code
+    string location
+  }
+  DEVICE {
+    uuid id PK
+    string type
+    string status
+    timestamp last_seen
+  }
+  ELEVATOR_TRIP {
+    uuid id PK
+    uuid employee_id FK
+    uuid factor_id FK
+    timestamp ts_in
+    timestamp ts_out
+    int floor_in
+    int floor_out
+    decimal co2e_kg
+  }
+  DIGITAL_USAGE {
+    uuid id PK
+    uuid employee_id FK
+    uuid factor_id FK
+    date usage_date
+    decimal pc_active_hours
+    int print_pages
+    decimal drive_usage_gb
+    decimal co2e_kg
+  }
+  EMISSION_FACTOR {
+    uuid id PK
+    string category
+    string key
+    decimal value
+    string unit
+    string source
+    date valid_from
+  }
