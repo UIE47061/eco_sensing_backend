@@ -23,17 +23,25 @@ app = FastAPI(
 )
 
 
+def get_docs_credentials() -> tuple[str, str]:
+    return (
+        os.getenv("DOCS_USERNAME", Env.DOCS_USERNAME),
+        os.getenv("DOCS_PASSWORD", Env.DOCS_PASSWORD),
+    )
+
+
 def verify_credentials(
     credentials: HTTPBasicCredentials = Depends(security),
 ) -> HTTPBasicCredentials:
-    if not Env.DOCS_USERNAME or not Env.DOCS_PASSWORD:
+    docs_username, docs_password = get_docs_credentials()
+    if not docs_username or not docs_password:
         raise HTTPException(
             status_code=500,
             detail="Docs credentials are not configured",
         )
 
-    is_valid_username = secrets.compare_digest(credentials.username, Env.DOCS_USERNAME)
-    is_valid_password = secrets.compare_digest(credentials.password, Env.DOCS_PASSWORD)
+    is_valid_username = secrets.compare_digest(credentials.username, docs_username)
+    is_valid_password = secrets.compare_digest(credentials.password, docs_password)
     if not (is_valid_username and is_valid_password):
         raise HTTPException(
             status_code=401,
@@ -85,8 +93,12 @@ def root() -> dict[str, str]:
 
 
 @app.get("/health")
-def health_check() -> dict[str, str]:
-    return {"status": "ok"}
+def health_check() -> dict[str, object]:
+    docs_username, docs_password = get_docs_credentials()
+    return {
+        "status": "ok",
+        "docs_configured": bool(docs_username and docs_password),
+    }
 
 
 app.include_router(sensors.router)
