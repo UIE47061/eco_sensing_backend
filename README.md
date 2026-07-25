@@ -20,11 +20,33 @@ db/
 
 ## Setup
 
+macOS / Linux:
+
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
+```
+
+Windows (PowerShell):
+
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+copy .env.example .env
+```
+
+> If `Activate.ps1` is blocked by execution policy, run once: `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`
+
+Windows (cmd.exe):
+
+```cmd
+python -m venv .venv
+.venv\Scripts\activate.bat
+pip install -r requirements.txt
+copy .env.example .env
 ```
 
 ## Run
