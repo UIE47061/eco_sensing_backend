@@ -61,6 +61,33 @@ create table if not exists public.emission_factor (
   unique (category, key, valid_from)
 );
 
+create table if not exists public.device_binding (
+  id uuid primary key default gen_random_uuid(),
+  employee_id uuid not null references public.employee(id) on delete cascade,
+  device_id uuid not null references public.device(id) on delete cascade,
+  id_token text,
+  status text not null default 'active',
+  refresh_token_hash text,
+  bound_at timestamptz not null default now(),
+  last_seen timestamptz,
+  revoked_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.binding_code (
+  id uuid primary key default gen_random_uuid(),
+  code text unique not null,
+  device_id uuid not null references public.device(id) on delete cascade,
+  employee_id uuid references public.employee(id) on delete set null,
+  device_binding_id uuid references public.device_binding(id) on delete set null,
+  status text not null default 'pending',
+  expires_at timestamptz not null,
+  consumed_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists public.travel_record (
   id uuid primary key default gen_random_uuid(),
   employee_id uuid not null references public.employee(id) on delete cascade,
@@ -114,6 +141,8 @@ create table if not exists public.elevator_trip (
   ts_out timestamptz,
   floor_in integer not null,
   floor_out integer not null,
+  floor_delta integer,
+  direction text,
   co2e_kg numeric(14, 6),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -124,9 +153,14 @@ create table if not exists public.digital_usage (
   employee_id uuid not null references public.employee(id) on delete cascade,
   factor_id uuid references public.emission_factor(id) on delete set null,
   usage_date date not null,
+  path_type text,
   pc_active_hours numeric(8, 2) not null default 0,
+  pc_idle_hours numeric(8, 2) not null default 0,
+  pc_avg_cpu_util numeric(5, 2),
+  cpu_model text,
   print_pages integer not null default 0,
   drive_usage_gb numeric(12, 3) not null default 0,
+  drive_trash_gb numeric(12, 3) not null default 0,
   co2e_kg numeric(14, 6),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -134,6 +168,11 @@ create table if not exists public.digital_usage (
 
 create index if not exists idx_department_company_id on public.department(company_id);
 create index if not exists idx_employee_department_id on public.employee(department_id);
+create index if not exists idx_device_binding_employee_id on public.device_binding(employee_id);
+create index if not exists idx_device_binding_device_id on public.device_binding(device_id);
+create index if not exists idx_binding_code_device_id on public.binding_code(device_id);
+create index if not exists idx_binding_code_employee_id on public.binding_code(employee_id);
+create index if not exists idx_binding_code_device_binding_id on public.binding_code(device_binding_id);
 create index if not exists idx_travel_record_employee_id on public.travel_record(employee_id);
 create index if not exists idx_travel_record_factor_id on public.travel_record(factor_id);
 create index if not exists idx_waste_session_employee_id on public.waste_session(employee_id);
@@ -185,6 +224,16 @@ for each row execute function public.set_updated_at();
 drop trigger if exists set_emission_factor_updated_at on public.emission_factor;
 create trigger set_emission_factor_updated_at
 before update on public.emission_factor
+for each row execute function public.set_updated_at();
+
+drop trigger if exists set_device_binding_updated_at on public.device_binding;
+create trigger set_device_binding_updated_at
+before update on public.device_binding
+for each row execute function public.set_updated_at();
+
+drop trigger if exists set_binding_code_updated_at on public.binding_code;
+create trigger set_binding_code_updated_at
+before update on public.binding_code
 for each row execute function public.set_updated_at();
 
 drop trigger if exists set_travel_record_updated_at on public.travel_record;
