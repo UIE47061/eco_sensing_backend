@@ -5,6 +5,9 @@ __pycache__/
 *.so
 .Python
 
+# Graphify graphs
+/graphify-out
+
 # Virtual environments
 .venv/
 venv/
