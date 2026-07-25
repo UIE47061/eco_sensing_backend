@@ -5,6 +5,11 @@ erDiagram
   EMPLOYEE ||--o{ WASTE_SESSION : opens
   EMPLOYEE ||--o{ ELEVATOR_TRIP : takes
   EMPLOYEE ||--o{ DIGITAL_USAGE : generates
+  EMPLOYEE ||--o{ DEVICE_BINDING : enrolls
+  DEVICE ||--o{ DEVICE_BINDING : bound_as
+  DEVICE ||--o{ BINDING_CODE : requests
+  EMPLOYEE ||--o{ BINDING_CODE : consumes
+  DEVICE_BINDING ||--o| BINDING_CODE : issued_from
   WASTE_BIN ||--o{ WASTE_SESSION : scanned_in
   WASTE_BIN ||--o{ WASTE_EVENT : receives
   WASTE_SESSION ||--o{ WASTE_EVENT : pairs
@@ -89,6 +94,8 @@ erDiagram
     timestamp ts_out
     int floor_in
     int floor_out
+    int floor_delta
+    string direction
     decimal co2e_kg
   }
   DIGITAL_USAGE {
@@ -96,10 +103,37 @@ erDiagram
     uuid employee_id FK
     uuid factor_id FK
     date usage_date
+    string path_type
     decimal pc_active_hours
+    decimal pc_idle_hours
+    decimal pc_avg_cpu_util
+    string cpu_model
     int print_pages
     decimal drive_usage_gb
+    decimal drive_trash_gb
     decimal co2e_kg
+  }
+  BINDING_CODE {
+    uuid id PK
+    string code
+    uuid device_id FK
+    uuid employee_id FK
+    uuid device_binding_id FK
+    string status
+    timestamp created_at
+    timestamp expires_at
+    timestamp consumed_at
+  }
+  DEVICE_BINDING {
+    uuid id PK
+    uuid employee_id FK
+    uuid device_id FK
+    string id_token
+    string status
+    string refresh_token_hash
+    timestamp bound_at
+    timestamp last_seen
+    timestamp revoked_at
   }
   EMISSION_FACTOR {
     uuid id PK
