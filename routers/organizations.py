@@ -41,7 +41,6 @@ class DepartmentUpdate(BaseModel):
 
 class EmployeeCreate(BaseModel):
     department_id: UUID
-    id_token: str | None = None
     display_name: str = Field(..., examples=["Alex Chen"])
     email: str = Field(..., examples=["alex@example.com"])
     level: int = 1
@@ -50,7 +49,6 @@ class EmployeeCreate(BaseModel):
 
 class EmployeeUpdate(BaseModel):
     department_id: UUID | None = None
-    id_token: str | None = None
     display_name: str | None = None
     email: str | None = None
     level: int | None = None

@@ -8,7 +8,7 @@ from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 from fastapi.openapi.utils import get_openapi
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
-from routers import eco_records, organizations, supabase_test
+from routers import auth, eco_records, organizations, supabase_test
 from util.config import Env
 
 security = HTTPBasic()
@@ -102,6 +102,7 @@ def health_check() -> dict[str, object]:
 
 
 app.include_router(supabase_test.router)
+app.include_router(auth.router)
 app.include_router(organizations.router)
 app.include_router(eco_records.router)
 

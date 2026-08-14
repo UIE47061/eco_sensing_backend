@@ -56,7 +56,7 @@ App 目前是**純前端登入**——登入頁不驗帳密、選「員工端」
 ## 1. 定案參數（不可改，與 §8.4 / §4.4.4 同源）
 
 | 項目 | 值 | 儲存 / 備註 |
-|------|-----|-----------|
+| ------ | ----- | ----------- |
 | App Access Token exp | **1 小時** | 不落庫；由 App Refresh 換發；每個歸戶請求帶 `Authorization: Bearer` |
 | App Refresh Token exp | **30 天（不輪換）** | 存 `flutter_secure_storage`；後端只存 `refresh_token_hash`；到期重登 |
 
@@ -116,7 +116,7 @@ App 目前是**純前端登入**——登入頁不驗帳密、選「員工端」
 > App 只需知道呼叫這些端點；後端實作屬 §5.1 P1，非本文件重點，僅列供對齊。
 
 | 端點 | 呼叫者 / 認證 | 用途 |
-|------|------------|------|
+| ------ | ------------ | ------ |
 | `POST /api/auth/login` | App，帶 email + password | 驗帳密 → 簽發 App Access + App Refresh |
 | （換發端點）App token refresh | App，帶 Refresh Token | 比對 `refresh_token_hash` 且未撤銷 → 發新 Access；已撤銷回 `401/403` |
 | 所有歸戶端點 | App，帶 `Bearer <Access>` | 經 `get_current_employee` dependency 解出 `employee_id` |
@@ -142,7 +142,7 @@ App 目前是**純前端登入**——登入頁不驗帳密、選「員工端」
 - **App Refresh 的 `refresh_token_hash` 存新表 `APP_SESSION`（定案：開獨立表）**，不塞 `EMPLOYEE`。理由：Refresh 是「一筆一筆、有生命週期、可撤銷、單員工可多枚（多裝置）」的實體，非員工屬性；獨立表天然支援多裝置與個別撤銷，並與 `DEVICE_BINDING` 對 Eco-Agent 所做者同構。最小欄位：
 
   | 欄位 | 說明 |
-  |------|------|
+  | ------ | ------ |
   | `id` PK | |
   | `employee_id` FK → `EMPLOYEE` | 歸屬員工 |
   | `refresh_token_hash` | 只存 hash，不存明文 token |
@@ -185,9 +185,9 @@ App 目前是**純前端登入**——登入頁不驗帳密、選「員工端」
 **後端工作區（先做，Swagger 驗證通過才進 App 區）**
 
 | # | 階段 | 對應節次 | 工作區 | 狀態 |
-|---|------|----------|--------|------|
-| B1 | Schema 建置（`APP_SESSION` 建表、`EMPLOYEE` 補 `password_hash`／刪 `id_token`；`COMMENT ON` 註解） | §6、§0.1-1 | 後端 | ⬜ |
-| B2 | 後端薄切片：`POST /api/auth/login`（驗 `password_hash`→簽雙 token、寫 `APP_SESSION`）、換發端點、`get_current_employee` dependency | §0.1-2、§3.1 | 後端 | ⬜ |
+| --- | ------ | ---------- | -------- | ------ |
+| B1 | Schema 建置（`APP_SESSION` 建表、`EMPLOYEE` 補 `password_hash`／刪 `id_token`；`COMMENT ON` 註解） | §6、§0.1-1 | 後端 | ✅ |
+| B2 | 後端薄切片：`POST /api/auth/login`（驗 `password_hash`→簽雙 token、寫 `APP_SESSION`）、換發端點、`get_current_employee` dependency | §0.1-2、§3.1 | 後端 | 🟡 |
 | B3 | `employee_id` 由 `Bearer` 解出、各歸戶端點強制不信 body | §2 | 後端（App 僅配合 body 不帶身份） | ⬜ |
 | B4 | 撤銷簽發：離職／遺失標 `APP_SESSION.status=revoked`、換發回 `401/403` | §5 | 後端（App 承受，見 A5） | ⬜ |
 | B5 | 測試帳號 seed（雜湊寫入、可清除 email 慣例、明文不進版控） | §0.2 | 後端 | ⬜ |
@@ -196,7 +196,7 @@ App 目前是**純前端登入**——登入頁不驗帳密、選「員工端」
 **App 工作區（後端 Swagger 驗證通過後才開始）**
 
 | # | 階段 | 對應節次 | 工作區 | 狀態 |
-|---|------|----------|--------|------|
+| --- | ------ | ---------- | -------- | ------ |
 | A1 | 真實登入:串接 `POST /api/auth/login`、移除 demo 捷徑 | §3.1、§0.1-4 | App | ⬜ |
 | A2 | 憑證儲存:Refresh 改存 `flutter_secure_storage` | §3.2 | App | ⬜ |
 | A3 | 冷啟動靜默續期(含無網看快取) | §3.3 | App | ⬜ |
@@ -209,7 +209,7 @@ App 目前是**純前端登入**——登入頁不驗帳密、選「員工端」
 > 供 §7.1「階段與步驟」新增列時參照。以下項目本次不列 P1，若日後啟用，於 7.1 表格加對應列並標狀態。
 
 | 修訂項目 | 對應節次 | 觸發條件 |
-|----------|----------|----------|
+| ---------- | ---------- | ---------- |
 | 密碼重設流程 | 附註 | 需求納入或安全稽核要求 |
 | 帳號鎖定（連續失敗） | 附註 | 需求納入或安全稽核要求 |
 | Refresh 輪換（每次續期換發、舊的作廢） | §1、附註 | P3 資安強化啟動 |
