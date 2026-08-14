@@ -6,6 +6,7 @@ erDiagram
   EMPLOYEE ||--o{ ELEVATOR_TRIP : takes
   EMPLOYEE ||--o{ DIGITAL_USAGE : generates
   EMPLOYEE ||--o{ DEVICE_BINDING : enrolls
+  EMPLOYEE ||--o{ APP_SESSION : authenticates
   DEVICE ||--o{ DEVICE_BINDING : bound_as
   DEVICE ||--o{ BINDING_CODE : requests
   EMPLOYEE ||--o{ BINDING_CODE : consumes
@@ -14,6 +15,7 @@ erDiagram
   WASTE_BIN ||--o{ WASTE_EVENT : receives
   WASTE_SESSION ||--o{ WASTE_EVENT : pairs
   DEVICE ||--o{ WASTE_EVENT : emits
+  DEVICE ||--o{ DIGITAL_USAGE : reports
   EMISSION_FACTOR ||--o{ TRAVEL_RECORD : applies
   EMISSION_FACTOR ||--o{ WASTE_EVENT : applies
   EMISSION_FACTOR ||--o{ ELEVATOR_TRIP : applies
@@ -21,7 +23,7 @@ erDiagram
   EMPLOYEE {
     uuid id PK
     uuid department_id FK
-    string id_token
+    string password_hash
     string display_name
     string email
     int level
@@ -83,6 +85,7 @@ erDiagram
   DEVICE {
     uuid id PK
     string type
+    string display_name
     string status
     timestamp last_seen
   }
@@ -101,13 +104,17 @@ erDiagram
   DIGITAL_USAGE {
     uuid id PK
     uuid employee_id FK
+    uuid device_id FK
     uuid factor_id FK
     date usage_date
     string path_type
+    timestamp collected_at
     decimal pc_active_hours
     decimal pc_idle_hours
     decimal pc_avg_cpu_util
     string cpu_model
+    string printer_serial
+    int printer_page_counter
     int print_pages
     decimal drive_usage_gb
     decimal drive_trash_gb
@@ -133,6 +140,16 @@ erDiagram
     string refresh_token_hash
     timestamp bound_at
     timestamp last_seen
+    timestamp revoked_at
+  }
+  APP_SESSION {
+    uuid id PK
+    uuid employee_id FK
+    string refresh_token_hash
+    string status
+    timestamp created_at
+    timestamp expires_at
+    timestamp last_used_at
     timestamp revoked_at
   }
   EMISSION_FACTOR {
