@@ -130,6 +130,21 @@ def touch_session_last_used(session_id: UUID) -> None:
     )
 
 
+def revoke_sessions_for_employee(employee_id: UUID) -> int:
+    """離職／裝置遺失:撤銷該員工所有仍 active 的 App Refresh(§5)。
+
+    全撤銷而非挑單一裝置,因 APP_SESSION 目前無裝置識別欄(§7.2 待辦)。
+    """
+    data = request_supabase(
+        "PATCH",
+        "app_session",
+        params={"employee_id": f"eq.{employee_id}", "status": "eq.active"},
+        json={"status": "revoked", "revoked_at": datetime.now(timezone.utc).isoformat()},
+        prefer="return=representation",
+    )
+    return len(data) if data else 0
+
+
 def get_current_employee(authorization: str | None = Header(default=None)) -> UUID:
     if not authorization or not authorization.lower().startswith("bearer "):
         raise HTTPException(

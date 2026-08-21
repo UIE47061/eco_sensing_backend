@@ -4,6 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
+from services.auth import revoke_sessions_for_employee
 from services.crud import (
     create_record,
     delete_record,
@@ -53,6 +54,10 @@ class EmployeeUpdate(BaseModel):
     email: str | None = None
     level: int | None = None
     carbon_coin: int | None = None
+
+
+class RevokeSessionsResponse(BaseModel):
+    revoked_count: int
 
 
 def dump_payload(payload: BaseModel) -> dict[str, Any]:
@@ -132,3 +137,9 @@ def update_employee(employee_id: UUID, payload: EmployeeUpdate) -> dict[str, Any
 @router.delete("/employees/{employee_id}")
 def delete_employee(employee_id: UUID) -> dict[str, Any]:
     return delete_record("employee", employee_id)
+
+
+@router.post("/employees/{employee_id}/revoke-sessions")
+def revoke_employee_sessions(employee_id: UUID) -> RevokeSessionsResponse:
+    """離職／裝置遺失:撤銷該員工所有 App Refresh(§5、B4)。"""
+    return RevokeSessionsResponse(revoked_count=revoke_sessions_for_employee(employee_id))
