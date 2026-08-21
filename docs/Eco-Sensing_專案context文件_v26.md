@@ -26,11 +26,11 @@
 | 廢棄物 | 員工掃桶上 QR 開 session → 投入 → App 點投入完畢；樹莓派匿名上傳、後端配對歸戶（A＋C＋D＋G 組合） | 4.2 |
 | 電梯 | 感測端採**被動 NFC tag**（各樓層電梯廳，不供電／不接觸電梯控制系統，主動式 ESP32 降級為未來增強路徑，[D5]）；手機掃描進出樓層、HTTPS 直送後端（不經 MQTT）；共乘採方案 B 固定單人分攤值（樓層差 × 上/下行單人係數，不感測人數、不拆總耗電），激勵帳與盤查帳分離 | 4.3 |
 | Eco-Agent | Go 開發；方案 B 手機掃碼綁定＋雙 token；本地持久化佇列＋四重觸發上傳；集中配置參數已定案（4.4.4）；電腦路徑改使用率加權、Agent 純感測後端計算（4.4 [D7]）；雲端儲存量取 `usageInDrive`、`usageInDriveTrash` 拆作激勵任務（4.4 [D8]）；雲端 PUE 採 Google fleet-wide 均值、每GB儲存能耗強度以硬碟規格反推（4.4 [D9]，係數值待查證）；路徑 C 應用場景四類盤點、趨勢/教育可放心做、讀檔案清單類待隱私決策（4.4 [D10]）；印表機 SNMP 五參數隨綁定本地設定、不走全域下發（4.4.2、[D11]）；`DIGITAL_USAGE` 採一路徑一列、`path_type` 由 Agent 明送（[D12]，ERD 已補 `path_type`／`drive_trash_gb`）；**三路徑全改 HTTPS、Agent 不再連 MQTT Broker**（[D13]）；冪等去重定案——`collected_at` 勝出規則、鍵粒度依路徑分三組（電腦 per-device／印表機 per-printer／雲端 per-account）（[D14]，ERD 已補 `device_id`／`collected_at`／`printer_serial`／`DEVICE.display_name`）；**印表機路徑改送 SNMP 累計讀數、差分移至後端**（[D15]，ERD 已補 `printer_page_counter`） | 4.4 |
-| 印表機歸戶 | 優先開發「個人專屬機（Eco-Agent SNMP 輪詢歸戶）」與「手動上傳用紙量（App 主動感測、須搭誘因）」；共用機的 Print Server Log 與 Pull Printing API 列為可行、待實作測試；**歸鍵以印表機序號（`printer_serial`）而非 `device_id`**，防同一台印表機被兩台裝置重複計算（[D14]） | 4.4、7 |
+| 印表機歸戶 | 優先開發「個人專屬機（Eco-Agent SNMP 輪詢歸戶）」與「手動上傳用紙量（App 主動感測、須搭誘因）」；共用機的 Print Server Log 與 Pull Printing API 列為可行、待實作測試；**歸鍵以印表機序號（`printer_serial`）而非 `device_id`**，防同一台印表機被兩台裝置重複計算（[D14]）；**手動上傳用紙量落地定案（[D16]）**——走 `POST /api/digital-usages`（App 員工 `Bearer`、PostgREST，非 Agent 的 `agent/digital-usage/batch`）、以新欄位 `sensing_mode`（`auto`／`manual`）區分自動與手動、App 端彙總後端一天一列、兩管道互斥（專屬機走自動／共用機走手動，無雙重計算） | 4.4、7 |
 | 綁定碼儲存 | 後端 `BINDING_CODE` 表持久化短效一次性碼（5 分鐘 TTL、消費即失效、過期即失效） | 4.4.2 |
 | QR 辨識 | 全系統統一 custom scheme URI；掃描一律開/用 App，App 依 URI host/path 分流動作 | 4.5 |
 | Agent 撤銷 | 每次上傳夾帶撤銷狀態（不另做心跳），`401/403` 即自清憑證；離線延遲上界 ≈ maxAge；上傳全走 HTTPS 後此回應通道原生成立（[D13]） | 4.4.2 |
-| 後端 | FastAPI＋Supabase（PostgreSQL）；**資料存取分兩層——一般 CRUD 走 Supabase PostgREST（既有 `services/crud.py` 泛用層），`digital-usage/batch` 單一路徑走 asyncpg 直連 connection pooler（6543）**（[D4]）；寫入分兩軌——MQTT consumer 批次寫入（廢棄物）／HTTPS 批次端點（Eco-Agent）；`DIGITAL_USAGE` 冪等去重採應用層摺疊＋DB partial unique index 兩層；讀取端快取 | 5.1 |
+| 後端 | FastAPI＋Supabase（PostgreSQL）；**資料存取分兩層——一般 CRUD 走 Supabase PostgREST（既有 `services/crud.py` 泛用層，含 App 手動上傳用紙量 `POST /api/digital-usages`），Eco-Agent 自動感測 `POST /api/agent/digital-usage/batch`（v26 由 `digital-usage/batch` 更名、收進 `/api/agent/*`）走 asyncpg 直連 connection pooler（6543）**（[D4]、[D16]）；寫入分兩軌——MQTT consumer 批次寫入（廢棄物）／HTTPS 批次端點（Eco-Agent）；`DIGITAL_USAGE` 冪等去重採應用層摺疊＋DB partial unique index（**v26 由三個增為四個，新增手動印表機路徑，並以 `sensing_mode` 述詞區分自動／手動**）；讀取端快取 | 5.1 |
 | Controller | 自建輕量版，FastAPI 內管理模組（控制面／數據面邏輯分離）；配置經 MQTT retained＋HTTPS 夾帶雙通道下發 | 5.2 |
 | Eco-Sensing App（前端應用層） | 員工端 Flutter＋Riverpod、企業端 Vue Web 後台；功能、實作狀態（✅／🟡／⚪）與 App 專屬決策集中於第 8 章（原《App 系統功能》文件已併入、封存） | 8 |
 | App 身份認證 | **目前為純前端登入（不驗帳密、後端不知情）**；後端認證列為 P1 前置工作，`employee_id` 一律由憑證解出、不得由 client 於 body 指定（全系統統一原則，5.1 [D5]）；**憑證機制定案比照 Eco-Agent 採雙 token**——短效 App Access（1h）＋長效 App Refresh（30 天、存 `flutter_secure_storage`、後端存 hash 可撤銷），冷啟動以 Refresh 靜默續 Access 達成 §App1.0「自動判斷已登入」、過期判定權在後端（`401` 觸發）（5.1 [D5]、8.4） | 8.4、5.1、4.4.2 |
@@ -189,7 +189,7 @@
 | 路徑 | 對象 | 方法 | 協定 |
 |------|------|------|------|
 | A | 電腦使用 | Windows `GetLastInputInfo()` / macOS `IOHIDSystem`、`HIDIdleTime` 判活躍/閒置＋跨平台 CPU 使用率（`gopsutil`），每固定區間 `computerUsageRecordInterval` 輪詢；**Agent 只送原始量（active/idle 時數、平均使用率、CPU 型號），能耗由後端以使用率加權模型計算**（見「電腦能耗模型」） | HTTPS |
-| B | 印表機（個人專屬機） | SNMP（UDP 161）查詢 page counter OID `1.3.6.1.2.1.43.10.2.1.4` 取**壽命累計讀數**與序號 OID 取 `printer_serial`，**兩者原樣上送、差分由後端做**（[D15]）；以 Agent 綁定 employee_id 歸戶、以 `printer_serial` 歸鍵（[D14]）。共用機歸戶另循 Print Server Log／Pull Printing（可行、待實作測試）或改由 App 手動上傳用紙量（非本 Agent 路徑，屬使用者主動感測）——詳見決策記錄 [D6] | HTTPS |
+| B | 印表機（個人專屬機） | SNMP（UDP 161）查詢 page counter OID `1.3.6.1.2.1.43.10.2.1.4` 取**壽命累計讀數**與序號 OID 取 `printer_serial`，**兩者原樣上送、差分由後端做**（[D15]）；以 Agent 綁定 employee_id 歸戶、以 `printer_serial` 歸鍵（[D14]）；此軌 `sensing_mode = auto`（[D16]）。共用機歸戶另循 Print Server Log／Pull Printing（可行、待實作測試）或改由 **App 手動上傳用紙量**（**非本 Agent 路徑**，屬使用者主動感測，落庫走 `POST /api/digital-usages`、`sensing_mode = manual`，見 [D6]、[D16]）——詳見決策記錄 [D6]、[D16] | HTTPS |
 | C | 雲端儲存 | OAuth 2.0 授權，Google Drive API `about?fields=storageQuota`，取 `usageInDrive` 作為儲存量 × 每GB儲存能耗強度 × PUE（fleet-wide）（儲存量取值見 [D8]、係數取得見 [D9]） | HTTPS |
 
 **三條路徑的感測模式（輪詢 vs 事件觸發）**
@@ -214,13 +214,18 @@
   - **未來實作、測試（列為可行但待實作）**：共用印表機要歸戶到人須改用帶 user 欄位的來源——**Print Server Log**（逐工作帶送出者身份，天生事件式，可訂閱 Windows PrintService/Operational Event ID 307）或 **Pull Printing API**（刷卡列印，如 PaperCut，釋放前刷證驗證使身份與工作在源頭綁定）。兩者技術上皆可行、且「事件觸發＋歸戶」同時成立，但受限於實驗場域基礎設施前提，列為待實作與測試項。
 
 - **本地彙整與去識別化**：資料先寫入本機持久化佇列，於上傳前打包彙整——移除姓名/Email，僅保留員工 ID Token（符合個資合規）。上傳時機採多重觸發（不綁固定時刻），詳見 4.4.3。
-- **上傳 Payload**（HTTPS `POST {base_url}/digital-usage/batch`，`Authorization: Bearer <Access Token>`，body 為筆陣列，單次筆數上限 `uploadBatchMax`）：**每筆為「某裝置某日某路徑」的一筆感測結果**，且為**扁平記錄**（共同欄位與量值同層，不另包 payload 物件）。共同欄位為 `event_id`（4.4.3 的穩定鍵，Agent 明送，後端可直接用作冪等鍵而不必自行重組）、`usage_date`、`path_type`（列舉 `computer`／`printer`／`drive`，**由 Agent 明送、不由後端推斷**，見 [D12]）、`collected_at`（Agent 端採集時間戳，UTC RFC3339Nano，供亂序抵達勝出判定，見 [D14]），其餘欄位依 `path_type` 而定：
+- **上傳 Payload**（HTTPS `POST {base_url}/api/agent/digital-usage/batch`，`Authorization: Bearer <Agent Access Token>`，body 為筆陣列，單次筆數上限 `uploadBatchMax`）：**每筆為「某裝置某日某路徑」的一筆感測結果**，且為**扁平記錄**（共同欄位與量值同層，不另包 payload 物件）。共同欄位為 `event_id`（4.4.3 的穩定鍵，Agent 明送，後端可直接用作冪等鍵而不必自行重組）、`usage_date`、`path_type`（列舉 `computer`／`printer`／`drive`，**由 Agent 明送、不由後端推斷**，見 [D12]）、`collected_at`（Agent 端採集時間戳，UTC RFC3339Nano，供亂序抵達勝出判定，見 [D14]），其餘欄位依 `path_type` 而定：
   - `path_type = computer`：pc_active_hours、pc_idle_hours、pc_avg_cpu_util、cpu_model
   - `path_type = printer`：printer_serial、printer_page_counter（SNMP 壽命累計讀數，**非區間差值**；頁數由後端差分算出，見 [D15]）
   - `path_type = drive`：drive_usage_gb（取自 `usageInDrive`）、drive_trash_gb（取自 `usageInDriveTrash`，供激勵任務用，見 [D8]）
   （電腦路徑改送原始量——active/idle 時數、平均 CPU 使用率、CPU 型號——不再送 `pc_tdp_w`；能耗由後端計算。`factor_id`／`co2e_kg` 屬後端查係數計算後寫入，**不在 Agent payload 內**。）
   - **`employee_id` 與 `device_id` 皆不在 payload 內**：Agent 只持有 `id_token`（4.4.2，per-device 一枚），後端以 `id_token` 查 `DEVICE_BINDING` 即**同時解出 `employee_id` 與 `device_id`** 二者並落庫。故 [D14] 將 `device_id` 納入電腦路徑唯一鍵一事，對 Agent payload 零改動。
   - **惟 `printer_serial` 必須由 Agent 上送**：印表機序號是**本地網路事實**（同 [D11] 的 `HOST`／`OID`），後端無從得知某台桌機接的是哪台印表機，只能由 Agent 經 SNMP 讀出後隨資料上送。此為 [D14] 缺口二在路徑 B 上唯一需要動 payload 之處。
+- **手動上傳用紙量（App 路徑，非本 Agent 上傳，v26 [D16] 定案）**：印表機路徑 B 的備選來源「手動上傳用紙量」由**員工在 Eco-Sensing App 內輸入**，**不經 Eco-Agent、不走 `agent/digital-usage/batch`**，而是走既有的 **`POST /api/digital-usages`**（PostgREST 泛用 CRUD、App 員工 `Bearer`，`employee_id` 由 App Access Token 解出、不得於 body 指定）。落庫仍進 `DIGITAL_USAGE`，但以 **`sensing_mode = manual`** 與 Agent 自動路徑（`sensing_mode = auto`）區隔（見 [D16]）：
+  - **App 端彙總、後端一天一列**：員工當日可多筆記錄、每筆於送出前在 App 本地編輯；App 以某觸發機制上傳**當日彙總後的總用紙量一筆**，後端只把該筆 upsert 進「該員工×該日×`printer`×`manual`」那一列。多筆去重與編輯皆在 App 端（送出前）完成，後端不存明細、不需 `event_id` 冪等、不需 asyncpg 條件式 upsert（見 [D16]、5.1）。
+  - **落庫唯一鍵**：（`employee_id`, `usage_date`, `path_type`, `sensing_mode`）——`path_type = printer`、`sensing_mode = manual`；`printer_serial` 為 NULL（手動上傳無序號),故不套 SNMP 自動路徑的 per-printer 鍵，避開 `printer_serial` 為 NULL 的去重陷阱（見 [D16]、5.1 冪等去重）。
+  - **與自動路徑互斥（無雙重計算）**：手動上傳只用於**共用印表機**（無 Agent SNMP 之場域）；個人專屬印表機一律走 Agent SNMP（`auto`）。兩管道互斥、同一台機器不會同時有 `auto` 與 `manual` 兩列,故加總不重複（見 [D16]）。
+  - **落庫後更正**：App 本地編輯僅限**送出前**；已落庫者若需更正,走既有 `PATCH /api/digital-usages/{id}`（同帶 App `Bearer`）——惟「更新語意」（App 重算總量重送覆蓋 vs 直接改庫值）尚待釐清，見第 7 節。
 - **碳排換算（集中於後端）**：電力（電腦：使用率加權功率模型 `P_idle + 使用率 ×(P_active − P_idle)` × 時數 × 台電係數，`P_active` 由 CPU 型號查 TDP 表；未來可由 RAPL/powermetrics 即時功耗覆蓋）＋ 列印（頁數 × 紙張生命週期係數；頁數由後端以「當日最新 `printer_page_counter` − 前一日最新讀數」差分求得，見 [D15]）＋ 雲端（`usageInDrive` GB × 每GB儲存能耗強度（kWh/GB/年，未含 PUE）× PUE（Google fleet-wide ~1.1）× 電力係數 × 時間比例；`usageInDriveTrash` 另計為「可釋放能耗」供激勵，見 [D8]、[D9]）。TDP 對照表、P_idle 比例、每GB儲存能耗強度、PUE、各項係數皆屬 `EMISSION_FACTOR`／係數配置，後端維護、不寫死於 Agent。
 - **傳輸協定（v0.20 定案）**：三條路徑**一律走 HTTPS 進後端 REST API，Eco-Agent 不再連線 MQTT Broker**（原路徑 A／B 走 MQTT 之設計於 v0.20 廢止，理由見 [D13]）。本專案 MQTT 因此僅存兩處用途：廢棄物樹莓派的資料上行（4.2）與 5.2 對樹莓派的 retained 配置下發。Eco-Agent 執行檔可移除 MQTT client 依賴（`paho.mqtt.golang`）。
 
@@ -328,7 +333,8 @@ Eco-Agent 為無人值守背景程式，身份綁定採「**一次綁定、長�
   - `path_type = computer`：（`employee_id`, `usage_date`, `path_type`, `device_id`）——一裝置一列，員工層碳排以加總取得。
   - `path_type = printer`：（`employee_id`, `usage_date`, `path_type`, `printer_serial`）——**一印表機一列**。測量主體是印表機而非裝置，若改以 `device_id` 分列，桌機與筆電同指一台專屬印表機時會各記一份同機頁數、加總即重複計算（見 [D14]）。
   - `path_type = drive`：（`employee_id`, `usage_date`, `path_type`）——雲端儲存為**帳號層級事實**，同員工多台裝置查得同一數值，若納入 `device_id` 會憑空重複計算。
-- **亂序抵達的勝出規則**：每筆另帶 `collected_at`（Agent 端採集時間戳，UTC）。後端 upsert 僅當 `EXCLUDED.collected_at > digital_usage.collected_at` 時才更新，重送的舊封包不會蓋掉較新的值（見 [D14]）。原僅有 `usage_date`（日期粒度）不足以比較同日先後，故 v0.20 補此欄。
+  - 以上三組皆為 **Agent 自動感測路徑**（`sensing_mode = 'auto'`），走 `POST /api/agent/digital-usage/batch`。**App 手動上傳用紙量不在此列**：它不經 Agent、無 `id_token`，由 App 以員工憑證走 `POST /api/digital-usages`，落庫鍵為（`employee_id`, `usage_date`, `path_type='printer'`, `sensing_mode='manual'`），App 端已彙總當日總量、後端一天一列覆蓋（見 [D16]、5.1 冪等去重）。
+- **亂序抵達的勝出規則**：每筆另帶 `collected_at`（Agent 端採集時間戳，UTC）。後端 upsert 僅當 `EXCLUDED.collected_at > digital_usage.collected_at` 時才更新，重送的舊封包不會蓋掉較新的值（見 [D14]）。原僅有 `usage_date`（日期粒度）不足以比較同日先後，故 v0.20 補此欄。手動路徑亦沿用此欄作**防亂序重送**保險（App 弱網重送同一筆彙總時不讓舊封包蓋新值），惟其「編輯」發生於 App 本地送出前、不涉落庫後覆蓋（見 [D16]）。
 - 重複送達不重複計算由 5.1 之兩層冪等機制保證（應用層依鍵摺疊 ＋ DB partial unique index），詳見 5.1「`DIGITAL_USAGE` 冪等去重」。
 
 **與既有設計的銜接**
@@ -468,6 +474,13 @@ Eco-Agent 為無人值守背景程式，身份綁定採「**一次綁定、長�
   - **佇列模型不受影響**：仍是每印表機每日一列（狀態值輪詢、當日最新讀數覆蓋同一筆），4.4.3 關於 `thresholdCount` 之推論照舊。
   - **新引入的邊界情形（P2 實作須處理）**：整天無人開機則該日無讀數，下次讀到的差值會橫跨數日、被記在單一天。可選按日均攤或註記為「跨日補記」，屬實作細節，但須明訂——否則儀表板會出現無法解釋的尖峰。
   - **成本**：本項動到 payload 與 Agent 既有實作（Step 1.3 已在跑），非零成本。若時程吃緊，[D14] 的 `printer_serial` 歸鍵可單獨先做——重複計算即已消除，代價是「較晚開機那台的較短觀測窗」可能勝出而低估。低估比高估在報告論述上好交代，可作為過渡。
+- **[D16] 手動上傳用紙量落地定案：走 `digital-usages`、以 `sensing_mode` 欄位區分手動／自動、App 端彙總一天一列、兩管道互斥**（v26）：[D6] 已把「手動上傳用紙量」列為印表機路徑 B 的優先開發備選，但其**落庫端點、來源識別方式、去重鍵、與 Agent 自動路徑的關係**一直未定案。本決策一次補齊，並與《驗證機制端點關係表》§3.1 點出的 `digital-usages`（複數）vs `agent/digital-usage/batch` 定位落差對齊。
+  - **(1) 端點定位——`digital-usages` 正式保留作 App 手動補登管道**：`DIGITAL_USAGE` 的資料自此有**兩個並存來源**——Agent 自動感測（走 `agent/digital-usage/batch`、asyncpg 直連 pooler、裝置 `Bearer`）與 App 手動上傳（走既有 `POST /api/digital-usages`、PostgREST 泛用 CRUD、員工 `Bearer`）。兩者分屬 [D4] 分流表的兩側：手動上傳是使用者一次一筆的主動輸入，**無本地佇列重送、無亂序、無 per-device／per-printer 去重需求**，不需要條件式 upsert／交易控制,故落在 PostgREST 這一側,不必動用 asyncpg 直連。（否決「手動上傳也走 batch」：把不需要交易控制的路徑塞進為交易控制而生的端點，徒增耦合。）
+  - **(2) 端點更名——Agent 寫入端點收進 `/api/agent/*` 命名空間**：原規劃的 `POST /api/digital-usage/batch`（單數）與既有 `POST /api/digital-usages`（複數）僅差一個複數 `s`，又同寫一張 `DIGITAL_USAGE` 表，命名極易混淆、易誤呼叫。定案將 Agent 那條更名為 **`POST /api/agent/digital-usage/batch`**，與 4.4.2 綁定鏈四端點（`agent/binding-code`、`agent/bind`…）同組，確立「凡 `/api/agent/*` 即 Agent 裝置認證體系（asyncpg、條件式 upsert）」的清楚邊界；App 手動路徑維持 `/api/digital-usages` 不動。改 Agent 那條而非改 App 那條的理由：Agent 端點**尚未實作**（一行未寫），現在正名零成本；`digital-usages` 已實作、已套 `get_current_employee`、且與其餘三大模組泛用 CRUD 命名一致（全為複數表名），動它牽連一整排。兩條路徑真正的區別不在「單筆 vs 批次」，而在**認證體系**（員工 vs 裝置）——命名應反映此差異，故用命名空間而非複數 `s` 承載。
+  - **(3) 來源識別——新增獨立欄位 `sensing_mode`（`auto`／`manual`），而非於 `path_type` 加值**：手動上傳落 `DIGITAL_USAGE` 時,若記為 `path_type = printer` 卻缺 `printer_serial`,會踩中 [D14] 的 per-printer 唯一鍵在 `printer_serial` 為 NULL 時「NULL 互不相等、去重靜默失效」的陷阱。故須有一個欄位區分它與 SNMP 自動路徑。**採獨立欄位 `sensing_mode`（`auto`／`manual`）而非在 `path_type` 加 `printer_manual` 值**，理由是**正交性**：`path_type`（`computer`／`printer`／`drive`）描述**感測對象**，「手動 vs 自動」描述**感測方式**,兩者是獨立的軸；混進 `path_type` 會使值域「三個講對象、一個講對象＋方式」語意不齊,且未來若電腦、雲端也開手動補登,得為每個組合造 `computer_manual`／`drive_manual` 新值（對象×方式笛卡兒積、組合爆炸）,查「所有手動資料」得列舉一長串。拆獨立欄位則 `path_type` 恆三值、`sensing_mode` 恆兩值,自由組合,查驗（按來源方式篩選）乾淨（`WHERE sensing_mode='manual'`）,呼應本次「方便後續查驗感測資料」之目的。**現況取捨聲明**：本專案手動補登**目前只用於印表機**（其定位即「共用機／無 SNMP 場域的補位」）,不預期擴散；選 `sensing_mode` 拆欄**不是因為現在會擴散,而是保留擴充性、換取模型正交與查驗乾淨**,代價是唯一鍵須納入 `sensing_mode`（見 (4)）。（否決 `path_type` 加值:落地雖對既有鍵零擾動、最省,但值域語意不齊、擴充即膨脹,與本專案 [D12] 以來「來源資訊明確標記、不靠事後推斷」的一貫取向不合。）
+  - **(4) 去重鍵與彙總——App 端彙總、後端一天一列 upsert**：採「App 端彙總、後端一天一列」（呼應本決策的最簡落地）——員工當日可多筆記錄、每筆於**送出前在 App 本地編輯**,App 以某觸發機制上傳**當日彙總後的總用紙量一筆**,後端 upsert 進唯一鍵 **（`employee_id`, `usage_date`, `path_type='printer'`, `sensing_mode='manual'`）** 那一列。因彙總與多筆去重、編輯皆在 App 端（送出前）完成,後端**不存明細、不需 per-筆 `event_id` 冪等、不需 asyncpg**——`sensing_mode` 進入唯一鍵後,PostgREST 的無條件 upsert 覆蓋當日那列即足夠;`collected_at` 勝出規則仍**沿用作防亂序重送的保險**（弱網逾時重送同一筆彙總時,不讓舊封包蓋新值）,與「編輯」無關（編輯已在本地完成,落庫後不再由 App 重送修改版）。連帶:SNMP 自動路徑的既有 per-printer partial index 須明確帶 `sensing_mode='auto'`,`DIGITAL_USAGE` 的 partial unique index 由三個增為四個（見 5.1 冪等去重）。
+  - **(5) 兩管道互斥——無雙重計算**：`sensing_mode` 一分開,手動列與自動列各自成列、各自通過去重,若同一台個人專屬機**既有 Agent SNMP 又有員工手動補登**,加總會重複計算。故明訂**兩管道互斥前提**:**個人專屬印表機一律走 Agent SNMP（`auto`）,手動上傳只用於共用印表機（無 Agent SNMP 之場域）**。此與 [D6] 中手動上傳的原始定位（「共用機或缺乏集中列印設施場域的補位」）一致,互斥前提成立則同一台機器不會同時產生 `auto` 與 `manual` 兩列,雙重計算風險自然消解。
+  - **對既有決策的影響**：不動 [D12]（`path_type` 三值與「Agent 明送不推斷」原則不變,`sensing_mode` 為新增的正交欄位）、不動 [D14] 的三組 Agent 自動路徑鍵（僅為其 partial index 補上 `sensing_mode='auto'` 述詞）、不動 [D4] 分流判準（手動上傳因不需交易控制而落 PostgREST 側,正是判準的正確套用）。ERD `DIGITAL_USAGE` 新增 `sensing_mode` 欄位。
 
 ---
 
@@ -497,7 +510,7 @@ Eco-Agent 為無人值守背景程式，身份綁定採「**一次綁定、長�
 | 大語言模型 | OpenAI GPT-4o（OCR 後 NER、廢棄物 Fallback 判定） |
 | IoT 傳輸 | MQTT（Mosquitto Broker，**僅廢棄物樹莓派**上行與配置下發）、NFC（近場通訊）、SNMP（Eco-Agent 讀印表機 page counter 與序號） |
 | 外部 API | TDX 運輸 API、Google Maps API、Google Drive API v3 |
-| 後端 | **FastAPI（Python，async）** ＋ **Supabase（代管 PostgreSQL）**；資料存取雙層——**Supabase PostgREST**（一般 CRUD）＋ **asyncpg 直連 connection pooler**（`digital-usage/batch`，見 5.1 [D4]）；碳排運算引擎 ＋ 係數資料庫 ＋ MQTT consumer 批次寫入（廢棄物）＋ HTTPS 批次上傳端點與冪等 upsert（Eco-Agent）。部署：Docker Image → GitHub Actions → Hugging Face Spaces |
+| 後端 | **FastAPI（Python，async）** ＋ **Supabase（代管 PostgreSQL）**；資料存取雙層——**Supabase PostgREST**（一般 CRUD）＋ **asyncpg 直連 connection pooler**（`agent/digital-usage/batch`，v26 [D16] 更名；見 5.1 [D4]）；碳排運算引擎 ＋ 係數資料庫 ＋ MQTT consumer 批次寫入（廢棄物）＋ HTTPS 批次上傳端點與冪等 upsert（Eco-Agent）。部署：Docker Image → GitHub Actions → Hugging Face Spaces |
 | 控制架構 | SD-IoT Controller（控制面／數據面分離；自建輕量版，實作為 FastAPI 內管理模組，詳見 5.2） |
 | Desktop Agent | **Go**（單一靜態執行檔，跨平台交叉編譯）；HTTPS/SNMP/OAuth2 函式庫（v0.20 起不再需要 MQTT client，見 4.4 [D13]）；DPAPI／Keychain 憑證保護 |
 
@@ -515,8 +528,8 @@ Eco-Agent 為無人值守背景程式，身份綁定採「**一次綁定、長�
 
 | 存取層 | 適用端點 | 實作 | 說明 |
 |--------|----------|------|------|
-| **Supabase PostgREST（HTTP）** | 一般 CRUD（`companies`／`departments`／`employees`／`emission-factors`／`travel-records`／`waste-*`／`devices`／`elevator-trips`／`digital-usages` 單筆） | 既有 `db/supabase.py` ＋ `services/crud.py` 泛用層 | table-agnostic，端點路徑即表名，開發成本趨近零；P1 直通版主力 |
-| **asyncpg 直連 connection pooler（PostgreSQL wire protocol）** | **僅 `POST /api/digital-usage/batch` 一條** | 新增 `db/pool.py` ＋ `services/digital_usage.py` | 需要 `ON CONFLICT ... WHERE EXCLUDED.collected_at > ...` 條件式 upsert、partial index 作 conflict target、單一交易內完成後才回 `200`——三者皆超出 PostgREST 表達力 |
+| **Supabase PostgREST（HTTP）** | 一般 CRUD（`companies`／`departments`／`employees`／`emission-factors`／`travel-records`／`waste-*`／`devices`／`elevator-trips`／`digital-usages` 單筆）；**含 App 手動上傳用紙量**（`POST /api/digital-usages`、`sensing_mode='manual'`，見 4.4 [D16]） | 既有 `db/supabase.py` ＋ `services/crud.py` 泛用層 | table-agnostic，端點路徑即表名，開發成本趨近零；P1 直通版主力。手動上傳因 App 端已彙總、無條件式 upsert／交易控制需求，落此軌（[D16]） |
+| **asyncpg 直連 connection pooler（PostgreSQL wire protocol）** | **僅 `POST /api/agent/digital-usage/batch` 一條**（Eco-Agent 自動感測；v26 [D16] 由 `digital-usage/batch` 更名、收進 `/api/agent/*` 命名空間） | 新增 `db/pool.py` ＋ `services/digital_usage.py` | 需要 `ON CONFLICT ... WHERE EXCLUDED.collected_at > ...` 條件式 upsert、partial index 作 conflict target、單一交易內完成後才回 `200`——三者皆超出 PostgREST 表達力 |
 
 - 直連走 Supabase **connection pooler（Transaction mode，port 6543）**，避免 async 高併發耗盡資料庫連線數；transaction mode 下須設 `statement_cache_size=0`（asyncpg），且不可使用 session 層級功能（`LISTEN/NOTIFY`、session `SET`、server-side prepared statements）。
 - 連線字串以新增環境變數 `SUPABASE_DB_URL` 提供（`postgresql://...:6543/...`），與既有 `SUPABASE_URL`／`SUPABASE_KEY`（PostgREST 用）**並存而非取代**；pool 於 FastAPI lifespan 建立、掛於 `app.state`。
@@ -529,29 +542,37 @@ Eco-Agent 為無人值守背景程式，身份綁定採「**一次綁定、長�
 - **`DIGITAL_USAGE` 冪等去重（兩層並用，v0.20 定案；設計依據見 4.4 [D14]）**：
   - **應用層——收批後先依鍵摺疊**：同一唯一鍵只留 `collected_at` 最新的一筆，再組 upsert 語句。此為**必要步驟而非最佳化**：PostgreSQL 不允許同一 `ON CONFLICT DO UPDATE` 語句內有兩列衝突到同一鍵（報 `command cannot affect row a second time`），而本模型「每次輪詢以當日累計覆蓋同一筆」使重送的舊封包與新封包極易落在同一批次視窗內、構成同鍵。
   - **DB 層——unique index 作最後防線**：`INSERT ... ON CONFLICT (...) DO UPDATE SET ... WHERE EXCLUDED.collected_at > digital_usage.collected_at`。應用層摺疊解決單批次內衝突、DB constraint 擋跨批次與（P3 多實例後）跨行程重複，兩層職責不同、不可互相取代。
-  - **鍵依路徑分三組，以 partial unique index 表達**：
+  - **鍵依路徑分四組（v26 [D16] 新增手動路徑），以 partial unique index 表達**：
 
     ```sql
     -- 電腦：per-device，一裝置一列（電腦本身即測量主體），員工層碳排以加總取得
     CREATE UNIQUE INDEX uq_digital_usage_device ON digital_usage
       (employee_id, usage_date, path_type, device_id)
-      WHERE path_type = 'computer';
+      WHERE path_type = 'computer' AND sensing_mode = 'auto';
 
-    -- 印表機：per-printer，一印表機一列（裝置僅為觀測者）
+    -- 印表機（自動，Agent SNMP）：per-printer，一印表機一列（裝置僅為觀測者）
     -- 以 device_id 分列會使桌機＋筆電同指一台印表機時重複計算，見 [D14]
     CREATE UNIQUE INDEX uq_digital_usage_printer ON digital_usage
       (employee_id, usage_date, path_type, printer_serial)
-      WHERE path_type = 'printer';
+      WHERE path_type = 'printer' AND sensing_mode = 'auto';
+
+    -- 印表機（手動，App 上傳）：per-employee-day，一員工一天一列
+    -- 手動上傳無 printer_serial（NULL），故不套 per-printer 鍵、以 sensing_mode 分列，見 [D16]
+    -- App 端已彙總當日總量，後端 upsert 覆蓋此列即可
+    CREATE UNIQUE INDEX uq_digital_usage_printer_manual ON digital_usage
+      (employee_id, usage_date, path_type, sensing_mode)
+      WHERE path_type = 'printer' AND sensing_mode = 'manual';
 
     -- 雲端：per-account，同員工多裝置查得同值，納入裝置欄會重複計算
     CREATE UNIQUE INDEX uq_digital_usage_account ON digital_usage
       (employee_id, usage_date, path_type)
-      WHERE path_type = 'drive';
+      WHERE path_type = 'drive' AND sensing_mode = 'auto';
     ```
 
-    **不可合併為單一多段 unique constraint**：非該路徑的鍵欄位（雲端列的 `device_id`／`printer_serial`、電腦列的 `printer_serial`）為 NULL，PostgreSQL 預設視 NULL 互不相等，合併後該路徑去重會**靜默失效**（不報錯、只重複計算）。PG 15+ 可改用 `UNIQUE NULLS NOT DISTINCT` 達同等效果，仍採 partial index，因其把鍵粒度差異顯式寫入 schema。
-  - **實作註記（v0.21）**：以 partial index 作 conflict target 時，`ON CONFLICT` 子句**必須原樣重述該 index 的 `WHERE` 述詞**（例：`ON CONFLICT (employee_id, usage_date, path_type, device_id) WHERE path_type IN ('computer','printer')`），PostgreSQL 才能匹配到對應 index；因鍵粒度分三組（v0.23 [D14]），一批資料須拆成**三句 upsert**（`computer`／`printer`／`drive` 各一句）於**同一交易內**執行。此語法位置在 PostgREST 不存在，為 [D4] 分流至直連的直接原因。
-  - **三個 partial unique index 尚未於 `schema.sql` 建立**（截至 2026-08，資料庫已建表但**無任何資料**），列為 P1 優先工作項；未建立前 `ON CONFLICT ... WHERE` 會因找不到匹配的 unique constraint 直接報錯。
+    **不可合併為單一多段 unique constraint**：非該路徑的鍵欄位（雲端列的 `device_id`／`printer_serial`、電腦列的 `printer_serial`、手動列的 `printer_serial`）為 NULL，PostgreSQL 預設視 NULL 互不相等，合併後該路徑去重會**靜默失效**（不報錯、只重複計算）。PG 15+ 可改用 `UNIQUE NULLS NOT DISTINCT` 達同等效果，仍採 partial index，因其把鍵粒度差異顯式寫入 schema。
+    **`sensing_mode` 述詞的作用**：四個 index 皆帶 `sensing_mode` 條件,使 Agent 自動路徑（`auto`）與 App 手動印表機路徑（`manual`）在同一台機器同員工同日各自成列、互不撞鍵——這正是 [D16] 兩管道並存所需;而兩管道**互斥於場域**（個人專屬機走自動、共用機走手動）,故實務上同一（`employee_id`, `usage_date`, `printer`）不會同時出現 `auto` 與 `manual` 兩列,不致雙重計算（見 [D16]）。
+  - **實作註記（v0.21，v26 補述）**：以 partial index 作 conflict target 時，`ON CONFLICT` 子句**必須原樣重述該 index 的 `WHERE` 述詞**（含 `sensing_mode` 條件），PostgreSQL 才能匹配到對應 index。**此三句 upsert 屬 Agent 自動路徑**（`POST /api/agent/digital-usage/batch`，asyncpg 直連）：一批資料依鍵粒度拆成 `computer`／`printer`（`sensing_mode='auto'`）／`drive` **三句 upsert** 於**同一交易內**執行——此語法位置在 PostgREST 不存在，為 [D4] 分流至直連的直接原因。**App 手動印表機路徑（`sensing_mode='manual'`）不在此三句內**：它走 `POST /api/digital-usages`（PostgREST 泛用 CRUD），App 端已彙總當日總量、以無條件 upsert 覆蓋 `uq_digital_usage_printer_manual` 那一列即可（見 [D16]）。
+  - **四個 partial unique index 尚未於 `schema.sql` 建立**（截至 2026-08，資料庫已建表但**無任何資料**；v26 由三個增為四個——新增 `uq_digital_usage_printer_manual`），列為 P1 優先工作項；未建立前 `ON CONFLICT ... WHERE` 會因找不到匹配的 unique constraint 直接報錯。
   - **員工層聚合須先依該路徑鍵欄位加總**（電腦依 `device_id`、印表機依 `printer_serial`）；`pc_avg_cpu_util` 與 `cpu_model` 為不可加總欄位，處理原則見 4.4 [D14]。
   - **`print_pages` 為後端計算欄位（v0.23 [D15]）**：Agent 送 `printer_page_counter`（壽命累計讀數），後端以「當日最新讀數 − 前一日最新讀數」差分求得 `print_pages` 並落庫；計數器重置（本次 < 上次）之防呆亦由後端依歷史列判定。
 - **讀取端快取**：排行榜與企業端儀表板的聚合查詢採**讀取端快取**（TTL 約 5 分鐘），初期以 FastAPI 行程內記憶體快取實作，規模擴大後升級 Redis（sorted set 天生適合排行榜）。
@@ -561,7 +582,7 @@ Eco-Agent 為無人值守背景程式，身份綁定採「**一次綁定、長�
 
 | 階段 | 目標 | 主要工作項目 | 完成判準 | 狀態 |
 |------|------|--------------|----------|------|
-| P1 直通版 | API 跑通、資料落地 | **App 端後端認證（前置工作，見 [D5]）**：`EMPLOYEE` 補 `password_hash`、`POST /api/auth/login` 驗帳密後**簽發 App 雙 token（Access 1h＋Refresh 30 天）**、App 端換發端點（比對 `refresh_token_hash`）、FastAPI 驗證 dependency（`get_current_employee`）、App 端 `DemoAuthStorage` 改存真 token 於 `flutter_secure_storage`（Refresh）、冷啟動以 Refresh 靜默續 Access（對應 §1.0）；Supabase 依 ERD 建表（**含補建三個 partial unique index，見 5.1 冪等去重**）；FastAPI 實作四大模組寫入／查詢 API（逐筆直寫，不加緩衝，走 PostgREST 泛用 CRUD 層）；以 Swagger 測通全部端點；App 假資料改串真 API；**Eco-Agent 綁定鏈落地（索取 `binding_code` → App 掃碼核銷 → 建 `DEVICE_BINDING` → 發雙 token）** | 四大模組資料皆可經 API 寫入並查回；`employee_id` 全數由憑證解出而非 client 指定；Agent 可完成一次完整綁定 | ⬜ 未開始 |
+| P1 直通版 | API 跑通、資料落地 | **App 端後端認證（前置工作，見 [D5]）**：`EMPLOYEE` 補 `password_hash`、`POST /api/auth/login` 驗帳密後**簽發 App 雙 token（Access 1h＋Refresh 30 天）**、App 端換發端點（比對 `refresh_token_hash`）、FastAPI 驗證 dependency（`get_current_employee`）、App 端 `DemoAuthStorage` 改存真 token 於 `flutter_secure_storage`（Refresh）、冷啟動以 Refresh 靜默續 Access（對應 §1.0）；Supabase 依 ERD 建表（**含補建四個 partial unique index，見 5.1 冪等去重；v26 新增手動印表機路徑 `uq_digital_usage_printer_manual`**，並為既有三個補上 `sensing_mode` 述詞）；FastAPI 實作四大模組寫入／查詢 API（逐筆直寫，不加緩衝，走 PostgREST 泛用 CRUD 層；**含 App 手動上傳用紙量 `POST /api/digital-usages`、`sensing_mode='manual'`，見 [D16]**）；以 Swagger 測通全部端點；App 假資料改串真 API；**Eco-Agent 綁定鏈落地（索取 `binding_code` → App 掃碼核銷 → 建 `DEVICE_BINDING` → 發雙 token）** | 四大模組資料皆可經 API 寫入並查回；`employee_id` 全數由憑證解出而非 client 指定；Agent 可完成一次完整綁定 | ⬜ 未開始 |
 | P2 批次與快取版 | 效能與穩定 | MQTT consumer ＋ 記憶體佇列批次寫入（**廢棄物**）；**Eco-Agent HTTPS 批次上傳端點與冪等 upsert**（新增 `db/pool.py` asyncpg 直連 pooler ＋ `services/digital_usage.py`，見 [D4]；應用層摺疊、partial unique index、`collected_at` 勝出規則、commit 後才回 `200`）；碳排運算引擎（`factor_id`／`co2e_kg` 後端計算）；排行榜／儀表板讀取端快取（TTL 5 分）；廢棄物 session 逾時結算與互斥鎖落地 | 批次寫入上線；重送同一批不產生重複列、亦不覆蓋較新值；儀表板重複查詢不重算 | ⬜ 未開始 |
 | P3 擴充版（視規模啟用） | 大規模部署韌性 | 導入 Redis（排行榜 sorted set、跨實例共享快取）；MQTT QoS／重送策略（廢棄物軌）；基本監控與告警 | 多後端實例部署下快取結果一致；多實例並行寫入時 DB unique index 仍擋住重複 | ⬜ 未開始 |
 
@@ -570,7 +591,7 @@ Eco-Agent 為無人值守背景程式，身份綁定採「**一次綁定、長�
 - **[D1] FastAPI 選型理由**（v0.5）：async 非同步 I/O 適合大量裝置並發上傳的 IoT 場景；Pydantic 自動驗證請求欄位與型別，減少手寫防呆；自動生成 OpenAPI／Swagger 互動文件，前後端分工對接與測試成本低；與 Edge AI（YOLOv8n）、OCR 前處理腳本同為 Python，工具鏈一致。
 - **[D2] Supabase 選型理由**（v0.5）：免自架、免管備份的雲端 PostgreSQL；附帶 Auth、Row Level Security、Realtime、Storage，未來可漸進採用。
 - **[D3] 寫入端不設獨立 cache 層的評估**（v0.5）：專題規模（實驗場域數十名員工）之寫入頻率低——Desktop Agent 以本地佇列批次上傳（累積達量／關機前／開機後／最長滯留觸發，詳見 4.4.3）、其餘模組皆為事件驅動——寫入端不需獨立 cache 層，避免過早最佳化增加故障點。讀取端才是快取重點。
-- **[D4] 資料存取層採「PostgREST 為主、`digital-usage/batch` 單條直連 pooler」的混合作法**（v0.21）：團隊成員已完成的初步後端（`eco_sensing_backend`）採 **Supabase PostgREST** 存取資料庫——`services/crud.py` 為 table-agnostic 的泛用 CRUD 層，端點路徑即表名，所有 router 共用同一組 `list/get/create/update/delete`。此與 5.1 原文「FastAPI 一律走 connection pooler」的字面敘述不同，v0.21 就此正式定案為**兩層並存**，理由如下：
+- **[D4] 資料存取層採「PostgREST 為主、Agent 批次單條直連 pooler」的混合作法**（v0.21；該直連端點於 v26 [D16] 由 `digital-usage/batch` 更名為 `agent/digital-usage/batch`，以下敘述沿用定案時原名）：團隊成員已完成的初步後端（`eco_sensing_backend`）採 **Supabase PostgREST** 存取資料庫——`services/crud.py` 為 table-agnostic 的泛用 CRUD 層，端點路徑即表名，所有 router 共用同一組 `list/get/create/update/delete`。此與 5.1 原文「FastAPI 一律走 connection pooler」的字面敘述不同，v0.21 就此正式定案為**兩層並存**，理由如下：
   - **分歧只發生在一條路徑上**。PostgREST 的設計邊界在於「以 query string 表達查詢」，對 4.4 [D14] 所要求的三件事無法表達：(a) 條件式 upsert——`Prefer: resolution=merge-duplicates` 只能「撞鍵即無條件覆蓋」，沒有可以寫 `WHERE EXCLUDED.collected_at > digital_usage.collected_at` 的語法位置，而無條件覆蓋**正是 [D14] 缺口一明確要防的行為**（重送的舊封包會蓋掉較新的累計值）；(b) **partial unique index 作 conflict target**——`?on_conflict=` 無法附帶 index 的 `WHERE` 述詞，三種鍵粒度（v0.23 [D14]）無從區分；(c) **「單一交易內完成摺疊與 upsert、commit 之後才回 `200`」**——PostgREST 一請求一交易，但無法把應用層摺疊後的三句條件式 upsert（電腦／印表機／雲端各一句，見 [D14]）組進同一請求。其餘二十餘個 CRUD 端點完全不觸及這三點。
   - **此非效能取捨，而是表達力取捨**。PostgREST 自身亦是連著 pooler 的程式，兩者不在同一層次、不互斥；「改走直連」買到的是完整 SQL，不是更快的連線。
   - **`200` 的語意是地基，不可讓步**。4.4.3 的端到端至少一次送達完全建立在「收到 `200` = 已落地」上（[D13]），5.1 亦明訂「嚴禁先回 `200` 再非同步落地」。若為了遷就 PostgREST 而改用無條件覆蓋或事後補償，等同把 [D13]／[D14] 兩項 v0.20 定案一起推翻，代價遠大於多開一條存取路徑。
@@ -668,9 +689,9 @@ Eco-Agent 為無人值守背景程式，身份綁定採「**一次綁定、長�
 - [5.1][已決議] ~~後端框架與資料庫選型尚未定案~~ → **FastAPI + Supabase（PostgreSQL），詳見 5.1**。
 - [5.1][待實測] 後端批次寫入參數（flush 間隔、批量上限）與排行榜快取 TTL，待實測調整；Redis（P3）的導入門檻（部署規模）待定。
 - [5.1][已決議] ~~既有後端採 PostgREST 與 5.1「一律走 connection pooler」之分歧~~ → **採兩層並存：一般 CRUD 維持 PostgREST 泛用層，`digital-usage/batch` 單條改走 asyncpg 直連 pooler（6543）**，判準為「是否需要條件式 upsert／交易控制」，詳見 5.1 [D4]。
-- [5.1][待實作] `schema.sql` 補建 `uq_digital_usage_device`／`uq_digital_usage_printer`／`uq_digital_usage_account` 三個 partial unique index（**目前尚未建立**，列 P1 優先項；三組鍵粒度見 4.4 [D14]）；資料庫現無任何資料，schema 調整無須遷移成本。
+- [5.1][待實作] `schema.sql` 補建 `uq_digital_usage_device`／`uq_digital_usage_printer`／`uq_digital_usage_printer_manual`／`uq_digital_usage_account` **四個** partial unique index（**目前尚未建立**，列 P1 優先項；v26 [D16] 由三增為四、新增手動印表機路徑,且四者皆帶 `sensing_mode` 述詞;鍵粒度見 4.4 [D14]、[D16]）；資料庫現無任何資料，schema 調整無須遷移成本。
 - [4.4/5.1][已決議] ~~`id_token` 於 ERD 中同時出現於 `EMPLOYEE` 與 `DEVICE_BINDING`，語意易混淆，需釐清 `EMPLOYEE.id_token` 是否冗餘~~ → **`EMPLOYEE.id_token` 確認冗餘、刪除**。4.4.3 事件 ID 與 4.4.2 綁定所用者一律為 **`DEVICE_BINDING.id_token`（裝置粒度，per-device 一枚）**，[D14] 之鍵粒度論證即依賴此點；`EMPLOYEE.id_token` 無實際用途，刪除以消除同名混淆。ERD（`eco_sensing_erd.mmd`）已同步移除該欄。
-- [5.1][待實作] Eco-Agent 專用端點於既有後端尚不存在（現況僅有各表泛用 CRUD）：`binding_code` 索取與核銷、雙 token 簽發與 refresh、`digital-usage/batch`、Bearer 認證與撤銷回應（`401/403`）、碳排運算引擎（`factor_id`／`co2e_kg`）。
+- [5.1][待實作] Eco-Agent 專用端點於既有後端尚不存在（現況僅有各表泛用 CRUD）：`agent/binding-code` 索取與核銷、雙 token 簽發與 refresh、`agent/digital-usage/batch`（v26 [D16] 更名）、Bearer 認證與撤銷回應（`401/403`）、碳排運算引擎（`factor_id`／`co2e_kg`）。
 - [共用][待討論] 碳排係數資料庫的更新機制與來源權威性如何維護？
 - [5.2][已決議] ~~SD-IoT Controller 的具體實作方式（自建 vs 既有框架）？~~ → **自建輕量版，實作為 FastAPI 內管理模組（控制面／數據面為邏輯分離），配置經 MQTT retained message 與 HTTPS 回應夾帶下發，詳見 5.2**。
 - [5.2][待設計] `sensor_config`（policy）表的欄位設計與配置版本號機制（全域版本 vs 分裝置版本），待 P2 實作時訂定。
@@ -711,6 +732,9 @@ Eco-Agent 為無人值守背景程式，身份綁定採「**一次綁定、長�
 - [4.4][已決議] ~~桌機與筆電同指一台專屬印表機時頁數重複加總~~ → **路徑 B 歸鍵改用 `printer_serial`（per-printer）而非 `device_id`**，同一台印表機無論被幾台裝置觀測都只有一列；並**改送 SNMP 壽命累計讀數、差分移至後端**（順帶修掉 baseline 只存於 Agent 本機、重裝即遺失的獨立缺陷）。詳見 4.4 [D14]（缺口二表格）、[D15]。
   - [4.4][待實測] 實驗場域印表機之序號 OID 支援度：`prtGeneralSerialNumber`／`entPhysicalSerialNum`／`sysName` 三者是否至少一個回傳非空值。低階機種常三者皆空，屆時該裝置回退以 `device_id` 歸鍵並標記「印表機身份不明」，重複計算風險於該場域仍存在。
   - [4.4/5.1][待設計] 路徑 B 跨日補記的處理：整天無人開機則該日無讀數，下次讀數的差值橫跨數日、會被記在單一天。按日均攤 vs 註記為「跨日補記」待定，屬 P2 實作細節但須明訂，否則儀表板出現無法解釋的尖峰。
+- [4.4/5.1][已決議] ~~手動上傳用紙量的落庫端點、來源識別、去重鍵與 Agent 自動路徑的關係（《驗證機制端點關係表》§3.1 之 `digital-usages` vs `digital-usage/batch` 定位落差）~~ → **v26 [D16] 定案**：(1) `POST /api/digital-usages`（PostgREST、App 員工 `Bearer`）正式保留作 App 手動補登管道，與 Agent 自動路徑並存為 `DIGITAL_USAGE` 兩來源；(2) Agent 寫入端點更名 `POST /api/agent/digital-usage/batch`、收進 `/api/agent/*` 命名空間以消混淆；(3) 新增獨立欄位 `sensing_mode`（`auto`／`manual`）區分自動／手動（正交於 `path_type`、保留擴充性，不於 `path_type` 加值）；(4) App 端彙總、後端一天一列 upsert，唯一鍵（`employee_id`, `usage_date`, `path_type='printer'`, `sensing_mode='manual'`）；(5) 兩管道互斥（專屬機走自動、共用機走手動），無雙重計算。詳見 4.4 [D16]、5.1 冪等去重（partial index 由三增為四）。ERD `DIGITAL_USAGE` 新增 `sensing_mode`。
+  - [4.4/5.1][待釐清] **手動上傳落庫後的更正語意**：App 本地編輯僅限送出前；已落庫者若需更正,走既有 `PATCH /api/digital-usages/{id}`(帶 App `Bearer`)——惟「更新語意」尚未定：(a) App 重算當日總量後**重送覆蓋**該列,或 (b) 直接 **PATCH 改庫值**。兩者行為不同（前者 App 端重算、後者後端直接改),須擇一明訂,否則同一列的更新來源不一致。屬 P2 實作細節,不阻塞 [D16] 主決策。
+  - [4.4][待確認] 手動上傳的**觸發機制**（App 於何時把當日彙總上傳:每筆記錄即送/定時/收工手動送出）與**誘因設計**（比照 i 減碳任務以 EXP／碳幣激勵,鼓勵員工主動記錄),屬 App 端（§8）與遊戲化（1.7）待細化項。
 
 ---
 
@@ -730,7 +754,7 @@ Eco-Agent 為無人值守背景程式，身份綁定採「**一次綁定、長�
 - **主框架**：`EmployeeHomePage` 採五分頁底部導覽——儀表板、i 減碳、掃描、排行榜、個人。
 - **碳排儀表板（首頁）**：Hero 指標（較上月、月目標）、使用者卡片（顯示名稱／等級／碳幣）、經驗值進度條（每級 500 EXP）、每日減碳建議輪播、月度碳排組成（差旅／廢棄物圓餅圖與週趨勢）、近期碳排紀錄。規劃中：能源活動統計（電梯、數位碳足跡）整合呈現與數據分享。
 - **i 減碳**：月度碳排獎勵彈窗、減碳成果統計與月目標進度、任務類別篩選（交通／廢棄物／能源／飲食／辦公）、減碳任務列表（含 EXP／碳幣／預估減碳量）。任務資料涵蓋商務差旅、大眾運輸、自行車通勤、共乘、廢棄物、電梯、餐飲、無紙化。
-- **掃描**：三軌單據掃描（OCR 流程，UI 完整、辨識為模擬）——票據類型／日期／起訖／金額／碳足跡皆可編輯，確認後走「AI 辨識中→完成獎勵」；掃描垃圾桶（智慧回收 demo，QR→投入→AI 計算→結果動畫）；**手動上傳用紙量**（印表機路徑備選，對應 4.4 [D6]，使用者主動感測、須搭誘因）。
+- **掃描**：三軌單據掃描（OCR 流程，UI 完整、辨識為模擬）——票據類型／日期／起訖／金額／碳足跡皆可編輯，確認後走「AI 辨識中→完成獎勵」；掃描垃圾桶（智慧回收 demo，QR→投入→AI 計算→結果動畫）；**手動上傳用紙量**（印表機路徑備選，對應 4.4 [D6]，使用者主動感測、須搭誘因；**落地定案見 4.4 [D16]**——當日可多筆記錄、每筆送出前於 App 本地編輯，App 彙總後走 `POST /api/digital-usages`（`sensing_mode='manual'`）上傳，後端一天一列）。
 - **排行榜**：部門排行（各部門對應不同指標與單位——業務差旅減碳、研發用電節省、人資用紙減少、行銷廢棄物減量、物流車輛碳減）、個人排名卡、頒獎台與排名列表、名次獎勵說明。
 - **個人資料**：資料／成就／設定三分頁——基本資料編輯、等級與獎勵、修改密碼（前端流程完成待串接）；成就解鎖與展示櫃；組織資訊、外觀語言、通知、帳戶（分享碳排檔案／下載數據／登出／刪除帳號）、關於。另有**我的 QR Code 彈窗**（`QRCodePopup`，產生員工識別 QR 供掃碼辨識身份）。
 - **遊戲化與獎勵機制（跨頁面，規劃中）**：EXP／等級（每級 500 EXP）、碳幣、成就與展示櫃、排行榜名次獎勵、減碳任務、月度結算彈窗。最終規則（經驗值曲線、碳幣兌換、與 Shared Savings／GDT 連動）尚待確認（見 1.7）。
@@ -853,3 +877,4 @@ Eco-Agent 為無人值守背景程式，身份綁定採「**一次綁定、長�
 | 2026-08-07 | v0.23 | **路徑 B（印表機）鍵粒度修正與感測值形式改變**。(一)**[D14] 缺口二修正（改表格呈現）**：v0.20 為修正多裝置撞鍵而將 `device_id` 納入唯一鍵，惟路徑 B 比照電腦路徑處理有誤——**桌機與筆電同指一台專屬印表機**時，兩個 Agent 各自回報同一台機器的頁數、分列後加總即重複計算，誤差方向由低估翻為高估且倍率隨開機重疊區間浮動（1x～Nx）、無法事後修正。根因為「裝置是主體」與「裝置是觀測者」混淆：路徑 A 的電腦本身即被測量對象（per-device 正確），路徑 B／C 的裝置僅為觀測者，測量對象分別是印表機與 Google 帳號。故**路徑 B 歸鍵改用 `printer_serial`（SNMP 讀取）**、鍵粒度依路徑分三組（電腦 per-device／印表機 per-printer／雲端 per-account），以三個 partial unique index 分別表達。附帶效益：同一序號掛在兩個 `employee_id` 底下即可告警，把「兩人共用同一台『個人專屬』印表機」這個原本無法偵測的靜默錯誤變成可稽核條件。[D14] 缺口二改為表格（路徑／改動前資料粒度／問題／改動與改動後資料粒度），實作細節（三組 index、序號 OID 與退化路徑、payload 影響、`employee_id` 快照、下游聚合約束、ERD 改動、否決限綁一裝置）簡化列於表後。(二)**新增 [D15]：路徑 B 改送 SNMP 壽命累計讀數、差分移至後端**——原由 Agent 本機相減後上送 `print_pages`，baseline 只活在 Agent 本機，重裝／換機／佇列毀損即遺失（輕則用量消失、重則從 0 重算把整台機器壽命頁數記到某員工頭上），屬獨立於 [D14] 的缺陷；且多觀測者各自從自身 baseline 算出的 delta 不是同一個量，`collected_at` 最新者勝在 delta 語意下失效。改送絕對讀數後多觀測者讀得同值、該規則重新成立，語意亦與路徑 C 對齊（送絕對狀態值、最新者勝、後端換算），`print_pages` 順勢改為後端計算欄位（符合 [D7]），計數器重置防呆一併移至後端。更新：現況快照 Eco-Agent／印表機歸戶兩列、4.4 路徑表 B 列與 payload（`print_pages` → `printer_serial` ＋ `printer_page_counter`）、碳排換算列印項、4.4.2 SNMP 參數表（新增 `ECO_AGENT_PRINTER_SERIAL_OID`）與讀值／序號兩條、4.4.3 落庫鍵拆三組、5.1 index SQL 改三組與實作註記（拆三句 upsert）、5.1 聚合約束、[D4] 鍵粒度數、技術堆疊 SNMP 列；第 7 節新增已決議一項與待實測（序號 OID 支援度）、待設計（跨日補記）兩子項。**ERD 同步**：`DIGITAL_USAGE` 新增 `printer_serial` 與 `printer_page_counter`（`print_pages` 保留為後端計算欄位）。(三)**4.4.2 綁定流程補漏（同版追加）**：補上原缺漏的**步驟 5.5「Agent 輪詢領取 token」**——原六步驟由「後端發放 token」直接跳至「Agent 取得 token」，未說明 token 如何抵達 Agent；實際情境為 QR 顯示於電腦螢幕、掃碼發生於手機，後端與 Agent 之間此刻並無既有連線可推送（Agent 尚未持有任何憑證），故只能為 Agent 端輪詢。連帶：步驟 1 回應新增 `device_secret`（不編入 QR，供 ③ 證明身分，避免「誰持有 `code` 誰就能領 token」）、`BINDING_CODE` 表補存該欄、新增「後端須實作的四個端點」對照表（①建立綁定碼／②核銷並配對／③領取 token／④換發 token，含呼叫者與認證方式），並註記 `DEVICE` 列重複建立問題（建議 Agent 持久化 `device_uuid` 供後端 upsert）。 |
 | 2026-08-13 | v0.24 | **App 端憑證機制定案：比照 Eco-Agent 採雙 token**，回填 v0.22 遺留的「App token 儲存位置與效期策略／是否比照雙 token」待設計議題。決議 App 端採短效 App Access（1h）＋長效 App Refresh（30 天、不輪換），運作與 4.4.2 Eco-Agent 雙 token 同構（Access 每請求用、過期以 Refresh 無感換發，Refresh 亦過期／撤銷才重登）。**主要依據為《App 系統功能》§1.0「App 冷啟動時自動判斷是否已登入」需求**：該需求要「打開即進、長期免登入」的體驗，單枚短效 JWT 冷啟動幾必過期而須頻繁重登、與需求對撞，若改拉長單枚 JWT 的 `exp`（如 30 天）則因 JWT 無法即時撤銷、又無 Eco-Agent「每次上傳夾帶撤銷」通道兜底，等於把唯一風險上界放到最大且落在誘因機制（EXP／碳幣／Shared Savings）最不能被冒用處；雙 token 拆開「證明身份（短 Access）」與「保持登入（長 Refresh）」，同時取得短風險窗口、長期免登入、可撤銷三者。載明：冷啟動以 `flutter_secure_storage` 中 Refresh 靜默續 Access（無網時先進 App 看快取、待網補換）；**過期判定權在後端**（`get_current_employee` 每請求驗簽＋驗 `exp`、回 `401`），App 讀 `exp` 僅作 UX 預判、以收到 `401` 觸發續期／重登；Refresh 存 secure storage 不放 `SharedPreferences`；後端存 `refresh_token_hash` 供撤銷（離職／遺失標 `revoked`，Access 至多撐≤1h）；效期取值**脫鉤「月結算」**（30 天為體驗與風險之折衷，與資料聚合排程無關、同以月為單位僅屬巧合）；不啟用 Refresh 輪換（列 P3）。連帶更新：現況快照「App 身份認證」列、4.4.4 憑證效期表（改標題為「憑證效期（後端簽發策略，不下發）」並補 App Access／App Refresh 兩列，加註本組屬後端簽發策略非 `sensor_config` 下發參數）、5.1 [D5] 新增 v0.24 決議子段（含冷啟動流程、後端判定權、儲存位置、撤銷、效期脫鉤月結算、P1 落地影響——`login` 改一次簽發雙 token、新增 App 換發端點）、P1 工作項、第 7 節該待設計議題標記已決議。 |
 | 2026-08-13 | v0.25 | **新增第 8 章「Eco-Sensing App（前端應用層）」，將 App 相關內容自 §4／§5 抽出獨立呈現，並併入《App 系統功能 v0.4》**。動機：App 自身的功能、實作狀態與身份驗證決議屬「前端應用層」，性質有別於 §4 四大感測／核算模組與 §5 橫切層，散置各處不利檢視，故集中為獨立章節。新章節結構：8.1 員工端功能（Flutter）規格、8.2 企業端功能（Vue Web 後台）規格、8.3 實作狀態表（原《App 系統功能》「實作狀態」✅／🟡／⚪ 獨立拉出，員工端 App1.0–1.8 與企業端 App2.0–2.7 兩表）、8.4 App 身份驗證雙 token 機制（集中呈現雙 token 規格與 App Access 1h／App Refresh 30 天數值，與 4.4.4、5.1 [D5] 同源）、8.5 決策記錄（**原《App 系統功能》版本紀錄繼承為本章決策記錄**，另加 [A1] 雙 token、[A2] 純前端登入隱藏依賴、[A3] employee_id 由憑證解出三條 App 專屬決策）。章節編號：新章節插為 §8，原 §8 版本紀錄順移為 §9；§6 Roadmap、§7 Open Questions 位置與所有「第 7 節」交叉引用不變。**檔案治理**：《Eco-Sensing_App_系統功能_v04.md》自本版起封存、不再維護，App 功能演進改於本章第 8 章更新（8.5 版本紀錄末列已註記併入）。5.1 [D5] 與 4.4.4 效期表維持為雙 token 之權威出處，8.4 為 App 落地形狀之集中複述。 |
+| 2026-08-21 | v26 | **手動上傳用紙量落地定案（新增 [D16]）**，收斂《驗證機制端點關係表》§3.1 點出的 `digital-usages`（複數）vs `digital-usage/batch`（單數）定位落差。五點定案：(1)**端點定位**——`POST /api/digital-usages`（PostgREST 泛用 CRUD、App 員工 `Bearer`）正式保留作 App 手動補登管道，與 Agent 自動路徑並存為 `DIGITAL_USAGE` 兩來源；手動上傳因 App 端已彙總、無條件式 upsert／交易控制需求，落 PostgREST 側（[D4] 判準的正確套用），不動用 asyncpg。(2)**Agent 端點更名**——`POST /api/digital-usage/batch` 更名為 `POST /api/agent/digital-usage/batch`、收進 `/api/agent/*` 命名空間（與 4.4.2 綁定鏈同組），以命名空間承載「員工 vs 裝置」認證體系差異、消除與複數 `digital-usages` 的混淆；改未實作的 Agent 端而非已實作的 App 端，正名零成本。(3)**來源識別**——`DIGITAL_USAGE` 新增獨立欄位 `sensing_mode`（`auto`／`manual`）而非於 `path_type` 加 `printer_manual` 值,理由為正交性（`path_type` 描述感測對象、`sensing_mode` 描述感測方式）,避開 [D14] per-printer 鍵在 `printer_serial` 為 NULL 時的去重陷阱;**現況取捨聲明**:手動補登目前只用於印表機、不預期擴散,拆欄是為保留擴充性與模型正交/查驗乾淨,非因當前會擴散。(4)**去重鍵與彙總**——採 App 端彙總、後端一天一列:員工當日多筆記錄、每筆送出前於 App 本地編輯,App 上傳當日彙總總量一筆,後端 upsert 唯一鍵（`employee_id`, `usage_date`, `path_type='printer'`, `sensing_mode='manual'`）;後端不存明細、不需 per-筆 `event_id` 冪等、不需 asyncpg;`collected_at` 沿用作防亂序重送保險（與編輯無關,編輯在本地送出前完成）。(5)**兩管道互斥**——個人專屬機走 Agent SNMP（`auto`）、共用機走 App 手動（`manual`）,同一台機器不同時產生兩列,無雙重計算。連帶更新:現況快照印表機歸戶列與後端列、4.4 路徑表 B 列、4.4 payload 段（Agent 端點更名＋新增手動路徑獨立說明）、4.4.3 落庫鍵段（補手動路徑不屬 Agent 事件 ID 段之註記與 `collected_at` 防亂序用途）、5.1 資料存取層分工表兩列、5.1 冪等去重 index SQL（三個 partial index 增為四個、皆帶 `sensing_mode` 述詞、新增 `uq_digital_usage_printer_manual`）與實作註記、P1 工作項、8.1 手動上傳描述;新增決策記錄 [D16];第 7 節新增已決議一項（§3.1 定位落差）與待釐清子項（落庫後更正語意 `PATCH` vs 重送覆蓋、手動上傳觸發機制與誘因設計）。**ERD 同步**:`DIGITAL_USAGE` 新增 `sensing_mode` 欄位。不動 [D12]（`path_type` 三值與 Agent 明送原則）、[D14]（三組 Agent 自動路徑鍵,僅補 `sensing_mode='auto'` 述詞）、[D4]（分流判準不變）。 |
