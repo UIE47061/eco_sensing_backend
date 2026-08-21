@@ -19,6 +19,12 @@ def list_records(table: str, limit: int = 100, offset: int = 0) -> list[dict[str
     )
 
 
+def find_one(table: str, filters: dict[str, str]) -> dict[str, Any] | None:
+    params: dict[str, Any] = {**filters, "select": "*", "limit": 1}
+    data = request_supabase("GET", table, params=params)
+    return data[0] if data else None
+
+
 def get_record(table: str, record_id: UUID) -> dict[str, Any]:
     data = request_supabase(
         "GET",
