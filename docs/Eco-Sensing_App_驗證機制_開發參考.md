@@ -187,7 +187,7 @@ App 目前是**純前端登入**——登入頁不驗帳密、選「員工端」
 | # | 階段 | 對應節次 | 工作區 | 狀態 |
 | --- | ------ | ---------- | -------- | ------ |
 | B1 | Schema 建置（`APP_SESSION` 建表、`EMPLOYEE` 補 `password_hash`／刪 `id_token`；`COMMENT ON` 註解） | §6、§0.1-1 | 後端 | ✅ |
-| B2 | 後端薄切片：`POST /api/auth/login`（驗 `password_hash`→簽雙 token、寫 `APP_SESSION`）、換發端點、`get_current_employee` dependency | §0.1-2、§3.1 | 後端 | 🟡 |
+| B2 | 後端薄切片：`POST /api/auth/login`（驗 `password_hash`→簽雙 token、寫 `APP_SESSION`）、換發端點、`get_current_employee` dependency | §0.1-2、§3.1 | 後端 | ✅ |
 | B3 | `employee_id` 由 `Bearer` 解出、各歸戶端點強制不信 body | §2 | 後端（App 僅配合 body 不帶身份） | ⬜ |
 | B4 | 撤銷簽發：離職／遺失標 `APP_SESSION.status=revoked`、換發回 `401/403` | §5 | 後端（App 承受，見 A5） | ⬜ |
 | B5 | 測試帳號 seed（雜湊寫入、可清除 email 慣例、明文不進版控） | §0.2 | 後端 | ⬜ |
