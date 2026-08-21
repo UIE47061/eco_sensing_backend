@@ -2,9 +2,10 @@ from datetime import date, datetime
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
+from services.auth import get_current_employee
 from services.crud import (
     create_record,
     delete_record,
@@ -39,7 +40,6 @@ class EmissionFactorUpdate(BaseModel):
 
 
 class TravelRecordCreate(BaseModel):
-    employee_id: UUID
     factor_id: UUID | None = None
     track_type: str | None = Field(default=None, examples=["manual"])
     transport_mode: str = Field(..., examples=["mrt"])
@@ -54,7 +54,6 @@ class TravelRecordCreate(BaseModel):
 
 
 class TravelRecordUpdate(BaseModel):
-    employee_id: UUID | None = None
     factor_id: UUID | None = None
     track_type: str | None = None
     transport_mode: str | None = None
@@ -91,7 +90,6 @@ class DeviceUpdate(BaseModel):
 
 
 class WasteSessionCreate(BaseModel):
-    employee_id: UUID
     bin_id: UUID
     scan_at: datetime | None = None
     confirm_at: datetime | None = None
@@ -100,7 +98,6 @@ class WasteSessionCreate(BaseModel):
 
 
 class WasteSessionUpdate(BaseModel):
-    employee_id: UUID | None = None
     bin_id: UUID | None = None
     scan_at: datetime | None = None
     confirm_at: datetime | None = None
@@ -133,7 +130,6 @@ class WasteEventUpdate(BaseModel):
 
 
 class ElevatorTripCreate(BaseModel):
-    employee_id: UUID
     factor_id: UUID | None = None
     ts_in: datetime
     ts_out: datetime | None = None
@@ -143,7 +139,6 @@ class ElevatorTripCreate(BaseModel):
 
 
 class ElevatorTripUpdate(BaseModel):
-    employee_id: UUID | None = None
     factor_id: UUID | None = None
     ts_in: datetime | None = None
     ts_out: datetime | None = None
@@ -153,7 +148,6 @@ class ElevatorTripUpdate(BaseModel):
 
 
 class DigitalUsageCreate(BaseModel):
-    employee_id: UUID
     factor_id: UUID | None = None
     usage_date: date
     pc_active_hours: float = 0
@@ -163,7 +157,6 @@ class DigitalUsageCreate(BaseModel):
 
 
 class DigitalUsageUpdate(BaseModel):
-    employee_id: UUID | None = None
     factor_id: UUID | None = None
     usage_date: date | None = None
     pc_active_hours: float | None = None
@@ -203,8 +196,13 @@ def list_travel_records(limit: int = 100, offset: int = 0) -> list[dict[str, Any
 
 
 @router.post("/travel-records", status_code=201)
-def create_travel_record(payload: TravelRecordCreate) -> dict[str, Any]:
-    return create_record("travel_record", dump_payload(payload))
+def create_travel_record(
+    payload: TravelRecordCreate,
+    employee_id: UUID = Depends(get_current_employee),
+) -> dict[str, Any]:
+    data = dump_payload(payload)
+    data["employee_id"] = str(employee_id)
+    return create_record("travel_record", data)
 
 
 @router.get("/travel-records/{record_id}")
@@ -213,7 +211,11 @@ def get_travel_record(record_id: UUID) -> dict[str, Any]:
 
 
 @router.patch("/travel-records/{record_id}")
-def update_travel_record(record_id: UUID, payload: TravelRecordUpdate) -> dict[str, Any]:
+def update_travel_record(
+    record_id: UUID,
+    payload: TravelRecordUpdate,
+    _: UUID = Depends(get_current_employee),
+) -> dict[str, Any]:
     return update_record("travel_record", record_id, dump_payload(payload))
 
 
@@ -278,8 +280,13 @@ def list_waste_sessions(limit: int = 100, offset: int = 0) -> list[dict[str, Any
 
 
 @router.post("/waste-sessions", status_code=201)
-def create_waste_session(payload: WasteSessionCreate) -> dict[str, Any]:
-    return create_record("waste_session", dump_payload(payload))
+def create_waste_session(
+    payload: WasteSessionCreate,
+    employee_id: UUID = Depends(get_current_employee),
+) -> dict[str, Any]:
+    data = dump_payload(payload)
+    data["employee_id"] = str(employee_id)
+    return create_record("waste_session", data)
 
 
 @router.get("/waste-sessions/{record_id}")
@@ -288,7 +295,11 @@ def get_waste_session(record_id: UUID) -> dict[str, Any]:
 
 
 @router.patch("/waste-sessions/{record_id}")
-def update_waste_session(record_id: UUID, payload: WasteSessionUpdate) -> dict[str, Any]:
+def update_waste_session(
+    record_id: UUID,
+    payload: WasteSessionUpdate,
+    _: UUID = Depends(get_current_employee),
+) -> dict[str, Any]:
     return update_record("waste_session", record_id, dump_payload(payload))
 
 
@@ -328,8 +339,13 @@ def list_elevator_trips(limit: int = 100, offset: int = 0) -> list[dict[str, Any
 
 
 @router.post("/elevator-trips", status_code=201)
-def create_elevator_trip(payload: ElevatorTripCreate) -> dict[str, Any]:
-    return create_record("elevator_trip", dump_payload(payload))
+def create_elevator_trip(
+    payload: ElevatorTripCreate,
+    employee_id: UUID = Depends(get_current_employee),
+) -> dict[str, Any]:
+    data = dump_payload(payload)
+    data["employee_id"] = str(employee_id)
+    return create_record("elevator_trip", data)
 
 
 @router.get("/elevator-trips/{record_id}")
@@ -338,7 +354,11 @@ def get_elevator_trip(record_id: UUID) -> dict[str, Any]:
 
 
 @router.patch("/elevator-trips/{record_id}")
-def update_elevator_trip(record_id: UUID, payload: ElevatorTripUpdate) -> dict[str, Any]:
+def update_elevator_trip(
+    record_id: UUID,
+    payload: ElevatorTripUpdate,
+    _: UUID = Depends(get_current_employee),
+) -> dict[str, Any]:
     return update_record("elevator_trip", record_id, dump_payload(payload))
 
 
@@ -353,8 +373,13 @@ def list_digital_usages(limit: int = 100, offset: int = 0) -> list[dict[str, Any
 
 
 @router.post("/digital-usages", status_code=201)
-def create_digital_usage(payload: DigitalUsageCreate) -> dict[str, Any]:
-    return create_record("digital_usage", dump_payload(payload))
+def create_digital_usage(
+    payload: DigitalUsageCreate,
+    employee_id: UUID = Depends(get_current_employee),
+) -> dict[str, Any]:
+    data = dump_payload(payload)
+    data["employee_id"] = str(employee_id)
+    return create_record("digital_usage", data)
 
 
 @router.get("/digital-usages/{record_id}")
@@ -363,7 +388,11 @@ def get_digital_usage(record_id: UUID) -> dict[str, Any]:
 
 
 @router.patch("/digital-usages/{record_id}")
-def update_digital_usage(record_id: UUID, payload: DigitalUsageUpdate) -> dict[str, Any]:
+def update_digital_usage(
+    record_id: UUID,
+    payload: DigitalUsageUpdate,
+    _: UUID = Depends(get_current_employee),
+) -> dict[str, Any]:
     return update_record("digital_usage", record_id, dump_payload(payload))
 
 
