@@ -121,7 +121,88 @@ App 目前是**純前端登入**——登入頁不驗帳密、選「員工端」
 | （換發端點）App token refresh | App，帶 Refresh Token | 比對 `refresh_token_hash` 且未撤銷 → 發新 Access；已撤銷回 `401/403` |
 | 所有歸戶端點 | App，帶 `Bearer <Access>` | 經 `get_current_employee` dependency 解出 `employee_id` |
 
-> 換發端點的確切路徑（如 `/api/auth/token/refresh`）context 文件未定名，需與後端約定；語意比照 Eco-Agent 的 `POST /api/agent/token/refresh`。
+> 換發端點路徑已定案並實作：`POST /api/auth/token/refresh`；語意比照 Eco-Agent 的 `POST /api/agent/token/refresh`。
+
+### 4.1 Base URL（本機測試 vs 部署環境）
+
+| 環境 | Base URL | 說明 |
+| ------ | ---------- | ------ |
+| 本機開發（Swagger／curl，開發機本身） | `http://127.0.0.1:8000`（`uvicorn app:app --reload` 預設）或 `http://127.0.0.1:7860`（`python app.py`，依 `Env.PORT`） | 依啟動方式而定，以終端機實際印出的 port 為準，不要假設固定值 |
+| App 對本機後端（Android 模擬器） | `http://10.0.2.2:<port>` | 模擬器的 `localhost` 指向模擬器自身，須用 `10.0.2.2` 才能連回宿主機 |
+| App 對本機後端（iOS 模擬器） | `http://127.0.0.1:<port>` 或 `http://localhost:<port>` | iOS 模擬器與宿主機共用網路棧，可直接用 localhost |
+| App 對本機後端（實機、同區網） | `http://<開發機區網 IP>:<port>` | 例如 `http://192.168.1.23:8000`；手機與開發機須在同一 Wi-Fi |
+| **部署後（正式）** | **`https://uie47061-eco-sensing-backend.hf.space`** | Hugging Face Space；App release 版與交付測試一律打此網址 |
+
+- **App 端須把 base URL 做成可切換的環境設定**（如 `--dart-define`、build flavor、`.env`），**不可寫死在程式碼裡**；本機測試／部署環境間只切設定值，端點路徑本身兩邊相同（如 `/api/auth/login`）。
+- `/docs`、`/redoc`、`/openapi.json` 兩環境皆掛 HTTP Basic Auth（`DOCS_USERNAME`/`DOCS_PASSWORD`），僅影響人工用 Swagger 頁面測試時的登入；App 執行期呼叫的一般端點（`/api/...`）不受此限、不需帶這組帳密。
+- **CORS 提醒**：`app.py` 目前允許的 origin 僅 `localhost:5173`／`127.0.0.1:5173`／`huggingface.co`（給 Vue 企業後台用）。App 若以原生 iOS/Android 執行**不受 CORS 限制**（CORS 只作用於瀏覽器內的 fetch/XHR）；但若改以 **Flutter Web** 建置測試，須另將該 dev server 的 origin 加進後端 CORS 清單，否則請求會被瀏覽器擋下（回應到得了、但瀏覽器不轉交給 JS）。
+
+### 4.2 端點封包結構（Request / Response，依現行程式碼 `routers/auth.py`）
+
+**`POST /api/auth/login`** — 不需 Bearer
+
+```json
+// Request
+{ "email": "alex@example.com", "password": "test1234" }
+```
+
+```json
+// Response 200
+{
+  "access_token": "<JWT>",
+  "refresh_token": "<64B url-safe 亂數字串>",
+  "token_type": "bearer",
+  "expires_in": 3600
+}
+```
+
+```json
+// Response 401（帳密錯，帳號不存在／未設密碼／密碼不符皆回同一訊息，不洩漏帳號是否存在）
+{ "detail": "Invalid email or password" }
+```
+
+App 端對應動作：`access_token` 存記憶體、後續請求帶 `Authorization: Bearer <access_token>`；`refresh_token` 寫入 `flutter_secure_storage`；`expires_in`（秒，固定 3600＝1 小時）僅供 UX 預判提前引導，**不得**用它自行判定 token 是否有效（§3.4，判定權在後端）。
+
+**`POST /api/auth/token/refresh`** — 不需 Bearer，改帶 Refresh Token
+
+```json
+// Request
+{ "refresh_token": "<存於 flutter_secure_storage 的值>" }
+```
+
+```json
+// Response 200（注意：不回新的 refresh_token——§1 定案不輪換，App 端 Refresh 原值不變、不覆寫）
+{ "access_token": "<新 JWT>", "token_type": "bearer", "expires_in": 3600 }
+```
+
+```json
+// Response 401（refresh 不存在或已撤銷）
+{ "detail": "Refresh token invalid or revoked" }
+```
+
+```json
+// Response 401（refresh 已過期，30 天到期）
+{ "detail": "Refresh token expired" }
+```
+
+App 端對這兩種 401 的處理相同：清除本機憑證（含 secure storage 內的 refresh token）、導向登入頁（對應 §3.4 攔截器換發失敗分支、§5 撤銷承受）。
+
+**歸戶端點（帶 `Authorization: Bearer <access_token>`）的通用行為**
+
+- Access 過期或簽章/格式錯誤 → 一律 `401`，`detail` 為 `"Access token expired"` 或 `"Invalid access token"`，並帶 `WWW-Authenticate: Bearer` header。App 攔截器**不需解析 detail 文字差異**，見到 `401` 即觸發「換發＋重放原請求」（§3.4）。
+- 缺 `Authorization` header → `401 Missing bearer token`。
+- P1 範圍內、App 會以 Bearer 呼叫的四個寫入端點（`employee_id` 皆由後端從 token 解出並自動寫入，**App body 絕不帶 `employee_id`**，對應 §2 鐵律）：
+
+  | 端點 | 對應模組 | Request body 必要欄位（其餘見程式碼為選填） |
+  | ------ | ---------- | ---------------------------------------------- |
+  | `POST /api/travel-records` | 差旅 | `transport_mode`、`travel_date` |
+  | `POST /api/waste-sessions` | 廢棄物 session | `bin_id` |
+  | `POST /api/elevator-trips` | 電梯 | `ts_in`、`floor_in`、`floor_out` |
+  | `POST /api/digital-usages` | 用紙量手動上傳 | `usage_date`、`print_pages`（≥0） |
+
+  > 完整欄位（含選填）以 `routers/eco_records.py` 對應 Pydantic model（`TravelRecordCreate` / `WasteSessionCreate` / `ElevatorTripCreate` / `DigitalUsageCreate`）為準，此處僅列 App 端必填。`/digital-usages` 為同員工同日的「後蓋前」語意：同一天重複上傳採更新既有紀錄，但若重送的 `collected_at` 比既有紀錄舊則不覆蓋（見程式碼註解 [D16]）。GET/PATCH/DELETE 端點供資料回顯與修正，非 A1–A6 這一輪主要範圍。
+  >
+  > `waste-bins`／`devices`／`waste-events` 三端點不掛 `get_current_employee`（由感測裝置／Eco-Agent 側寫入，非員工歸戶動作），App 工作區本次不需呼叫。
 
 ---
 
