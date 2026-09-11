@@ -14,6 +14,7 @@ class Env:
     SUPABASE_KEY: str = os.getenv("SUPABASE_KEY", "")
     SUPABASE_ANON_KEY: str = os.getenv("SUPABASE_ANON_KEY", "")
     SUPABASE_SERVICE_ROLE_KEY: str = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
+    SUPABASE_DB_URL: str = os.getenv("SUPABASE_DB_URL", "")
     JWT_SECRET: str = os.getenv("JWT_SECRET", "")
     SEED_TEST_ACCOUNT_PASSWORD: str = os.getenv("SEED_TEST_ACCOUNT_PASSWORD", "")
     PORT: int = int(os.getenv("PORT", "7860"))

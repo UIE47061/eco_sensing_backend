@@ -119,6 +119,7 @@ erDiagram
     int print_pages
     decimal drive_usage_gb
     decimal drive_trash_gb
+    boolean printer_identity_unknown
     decimal co2e_kg
   }
   BINDING_CODE {
@@ -128,6 +129,7 @@ erDiagram
     uuid employee_id FK
     uuid device_binding_id FK
     string status
+    string device_secret_hash
     timestamp created_at
     timestamp expires_at
     timestamp consumed_at

@@ -83,6 +83,7 @@ create table if not exists public.binding_code (
   employee_id uuid references public.employee(id) on delete set null,
   device_binding_id uuid references public.device_binding(id) on delete set null,
   status text not null default 'pending',
+  device_secret_hash text,
   expires_at timestamptz not null,
   consumed_at timestamptz,
   created_at timestamptz not null default now(),
@@ -178,6 +179,7 @@ create table if not exists public.digital_usage (
   print_pages integer,
   drive_usage_gb numeric(12, 3),
   drive_trash_gb numeric(12, 3),
+  printer_identity_unknown boolean not null default false,
   co2e_kg numeric(14, 6),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -226,6 +228,13 @@ create unique index if not exists uq_digital_usage_printer_manual on public.digi
 create unique index if not exists uq_digital_usage_account on public.digital_usage
   (employee_id, usage_date, path_type)
   where path_type = 'drive' and sensing_mode = 'auto';
+
+-- 印表機(自動,序號查無):三候選 OID 皆查無序號時退回以 device_id 歸鍵;
+-- printer_serial 為 NULL 時 Postgres 視為互不相等,uq_digital_usage_printer 的 ON CONFLICT 不會觸發,
+-- 故另立此索引承接 fallback 案例,見 v26 §4.4.2「序號讀取」段
+create unique index if not exists uq_digital_usage_printer_unknown on public.digital_usage
+  (employee_id, usage_date, path_type, device_id)
+  where path_type = 'printer' and sensing_mode = 'auto' and printer_serial is null;
 
 create or replace function public.set_updated_at()
 returns trigger
@@ -322,3 +331,7 @@ comment on column public.digital_usage.printer_page_counter is
   '印表機壽命累計讀數(Agent 原樣上送);[D15] print_pages 由後端以本日減前一日差分計算';
 comment on column public.device.display_name is
   '裝置顯示名稱(綁定時 Agent 送 hostname 或員工自填);裝置分項一旦對使用者可見,UUID 無法辨識是哪一台,[D14] 補入';
+comment on column public.binding_code.device_secret_hash is
+  'sha256(device_secret);驗證端點③輪詢者是否為當初索取 code 的同一 Agent,v26 §4.4.2 步驟5.5';
+comment on column public.digital_usage.printer_identity_unknown is
+  '印表機三候選 OID 皆查無序號時,以 device_id 退回歸鍵並標記此列,v26 §4.4.2「序號讀取」段';
