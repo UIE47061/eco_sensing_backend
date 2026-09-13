@@ -22,7 +22,7 @@ create table if not exists public.department (
 create table if not exists public.employee (
   id uuid primary key default gen_random_uuid(),
   department_id uuid not null references public.department(id) on delete restrict,
-  id_token text unique,
+  password_hash text,
   display_name text not null,
   email text unique not null,
   level integer not null default 1,
@@ -42,6 +42,7 @@ create table if not exists public.waste_bin (
 create table if not exists public.device (
   id uuid primary key default gen_random_uuid(),
   type text not null,
+  display_name text,
   status text not null default 'active',
   last_seen timestamptz,
   created_at timestamptz not null default now(),
@@ -82,10 +83,22 @@ create table if not exists public.binding_code (
   employee_id uuid references public.employee(id) on delete set null,
   device_binding_id uuid references public.device_binding(id) on delete set null,
   status text not null default 'pending',
+  device_secret_hash text,
   expires_at timestamptz not null,
   consumed_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
+);
+
+create table if not exists public.app_session (
+  id uuid primary key default gen_random_uuid(),
+  employee_id uuid not null references public.employee(id) on delete cascade,
+  refresh_token_hash text not null,
+  status text not null default 'active',
+  created_at timestamptz not null default now(),
+  expires_at timestamptz not null,
+  last_used_at timestamptz,
+  revoked_at timestamptz
 );
 
 create table if not exists public.travel_record (
@@ -151,16 +164,22 @@ create table if not exists public.elevator_trip (
 create table if not exists public.digital_usage (
   id uuid primary key default gen_random_uuid(),
   employee_id uuid not null references public.employee(id) on delete cascade,
+  device_id uuid references public.device(id) on delete set null,
   factor_id uuid references public.emission_factor(id) on delete set null,
   usage_date date not null,
-  path_type text,
-  pc_active_hours numeric(8, 2) not null default 0,
-  pc_idle_hours numeric(8, 2) not null default 0,
+  path_type text not null,
+  sensing_mode text not null,
+  collected_at timestamptz not null,
+  pc_active_hours numeric(8, 2),
+  pc_idle_hours numeric(8, 2),
   pc_avg_cpu_util numeric(5, 2),
   cpu_model text,
-  print_pages integer not null default 0,
-  drive_usage_gb numeric(12, 3) not null default 0,
-  drive_trash_gb numeric(12, 3) not null default 0,
+  printer_serial text,
+  printer_page_counter integer,
+  print_pages integer,
+  drive_usage_gb numeric(12, 3),
+  drive_trash_gb numeric(12, 3),
+  printer_identity_unknown boolean not null default false,
   co2e_kg numeric(14, 6),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -173,6 +192,7 @@ create index if not exists idx_device_binding_device_id on public.device_binding
 create index if not exists idx_binding_code_device_id on public.binding_code(device_id);
 create index if not exists idx_binding_code_employee_id on public.binding_code(employee_id);
 create index if not exists idx_binding_code_device_binding_id on public.binding_code(device_binding_id);
+create index if not exists idx_app_session_employee_id on public.app_session(employee_id);
 create index if not exists idx_travel_record_employee_id on public.travel_record(employee_id);
 create index if not exists idx_travel_record_factor_id on public.travel_record(factor_id);
 create index if not exists idx_waste_session_employee_id on public.waste_session(employee_id);
@@ -185,6 +205,36 @@ create index if not exists idx_elevator_trip_employee_id on public.elevator_trip
 create index if not exists idx_elevator_trip_factor_id on public.elevator_trip(factor_id);
 create index if not exists idx_digital_usage_employee_id on public.digital_usage(employee_id);
 create index if not exists idx_digital_usage_factor_id on public.digital_usage(factor_id);
+create index if not exists idx_digital_usage_device_id on public.digital_usage(device_id);
+
+-- 電腦：per-device,一裝置一列(電腦本身即測量主體),員工層碳排以加總取得
+create unique index if not exists uq_digital_usage_device on public.digital_usage
+  (employee_id, usage_date, path_type, device_id)
+  where path_type = 'computer' and sensing_mode = 'auto';
+
+-- 印表機(自動,Agent SNMP):per-printer,一印表機一列(裝置僅為觀測者);
+-- 以 device_id 分列會使桌機＋筆電同指一台印表機時重複計算,見 [D14]
+create unique index if not exists uq_digital_usage_printer on public.digital_usage
+  (employee_id, usage_date, path_type, printer_serial)
+  where path_type = 'printer' and sensing_mode = 'auto';
+
+-- 印表機(手動,App 上傳):per-employee-day,一員工一天一列;
+-- 手動上傳無 printer_serial(NULL),故不套 per-printer 鍵、以 sensing_mode 分列,見 [D16]
+create unique index if not exists uq_digital_usage_printer_manual on public.digital_usage
+  (employee_id, usage_date, path_type, sensing_mode)
+  where path_type = 'printer' and sensing_mode = 'manual';
+
+-- 雲端:per-account,同員工多裝置查得同值,納入裝置欄會重複計算
+create unique index if not exists uq_digital_usage_account on public.digital_usage
+  (employee_id, usage_date, path_type)
+  where path_type = 'drive' and sensing_mode = 'auto';
+
+-- 印表機(自動,序號查無):三候選 OID 皆查無序號時退回以 device_id 歸鍵;
+-- printer_serial 為 NULL 時 Postgres 視為互不相等,uq_digital_usage_printer 的 ON CONFLICT 不會觸發,
+-- 故另立此索引承接 fallback 案例,見 v26 §4.4.2「序號讀取」段
+create unique index if not exists uq_digital_usage_printer_unknown on public.digital_usage
+  (employee_id, usage_date, path_type, device_id)
+  where path_type = 'printer' and sensing_mode = 'auto' and printer_serial is null;
 
 create or replace function public.set_updated_at()
 returns trigger
@@ -260,3 +310,28 @@ drop trigger if exists set_digital_usage_updated_at on public.digital_usage;
 create trigger set_digital_usage_updated_at
 before update on public.digital_usage
 for each row execute function public.set_updated_at();
+
+comment on column public.device_binding.id_token is
+  '裝置粒度憑證,per-device 一枚;4.4.3 事件 ID 與 [D14] 鍵粒度所依賴';
+comment on column public.device_binding.refresh_token_hash is
+  'Eco-Agent Refresh 的雜湊(裝置粒度)';
+comment on column public.app_session.refresh_token_hash is
+  'App Refresh 的雜湊(員工手機粒度);與 device_binding.refresh_token_hash 同名、不同粒度';
+comment on column public.employee.password_hash is
+  '密碼雜湊(bcrypt/argon2);僅 login 驗證用,簽出 token 後不再使用';
+comment on column public.digital_usage.path_type is
+  '感測對象列舉(computer/printer/drive);[D12] 由 Agent 明送,不由後端推斷';
+comment on column public.digital_usage.sensing_mode is
+  '感測方式(auto=Agent 自動感測, manual=App 手動彙總上傳);與 path_type 正交,[D16] 新增,四個 partial unique index 皆帶此述詞避免 NULL 互不相等的去重陷阱';
+comment on column public.digital_usage.collected_at is
+  'Agent 採集時間戳(UTC);[D14] upsert 勝出規則 WHERE EXCLUDED.collected_at > digital_usage.collected_at 所依賴';
+comment on column public.digital_usage.printer_serial is
+  'SNMP 序號(prtGeneralSerialNumber → entPhysicalSerialNum → sysName 依序試);[D14] per-printer 歸鍵所依賴,手動上傳恆為 NULL';
+comment on column public.digital_usage.printer_page_counter is
+  '印表機壽命累計讀數(Agent 原樣上送);[D15] print_pages 由後端以本日減前一日差分計算';
+comment on column public.device.display_name is
+  '裝置顯示名稱(綁定時 Agent 送 hostname 或員工自填);裝置分項一旦對使用者可見,UUID 無法辨識是哪一台,[D14] 補入';
+comment on column public.binding_code.device_secret_hash is
+  'sha256(device_secret);驗證端點③輪詢者是否為當初索取 code 的同一 Agent,v26 §4.4.2 步驟5.5';
+comment on column public.digital_usage.printer_identity_unknown is
+  '印表機三候選 OID 皆查無序號時,以 device_id 退回歸鍵並標記此列,v26 §4.4.2「序號讀取」段';

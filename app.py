@@ -1,5 +1,6 @@
 import os
 import secrets
+from contextlib import asynccontextmanager
 
 import uvicorn
 from fastapi import Depends, FastAPI, HTTPException
@@ -8,10 +9,19 @@ from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 from fastapi.openapi.utils import get_openapi
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
-from routers import eco_records, organizations, supabase_test
+from db.pool import close_pool, create_pool
+from routers import agent, auth, eco_records, organizations, supabase_test
 from util.config import Env
 
 security = HTTPBasic()
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    await create_pool()
+    yield
+    await close_pool()
+
 
 app = FastAPI(
     title=Env.PROJECT_NAME,
@@ -20,6 +30,7 @@ app = FastAPI(
     docs_url=None,
     redoc_url=None,
     openapi_url=None,
+    lifespan=lifespan,
 )
 
 
@@ -102,8 +113,10 @@ def health_check() -> dict[str, object]:
 
 
 app.include_router(supabase_test.router)
+app.include_router(auth.router)
 app.include_router(organizations.router)
 app.include_router(eco_records.router)
+app.include_router(agent.router)
 
 
 if __name__ == "__main__":

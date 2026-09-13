@@ -6,3 +6,6 @@ supabase
 pillow
 requests
 google-generativeai
+pyjwt
+bcrypt
+asyncpg
