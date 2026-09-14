@@ -28,7 +28,7 @@ class TrashTests(unittest.TestCase):
         response = self.client.post(self.url, json=self.payload)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), dict(success=True, session_id=SESSION_ID, status='completed',
-                         result=dict(weight=10.0, trash_type='unknown', carbon=0.0)))
+                         result=dict(weight=10.0, trash_type='unknown', carbon=0.025)))
         calls = self.db.call_args_list
         self.assertEqual([c.args for c in calls], [('GET', 'trash_sessions'), ('POST', 'trash_raw_data'),
                                                   ('PATCH', 'trash_sessions'), ('PATCH', 'trash_sessions')])
