@@ -252,7 +252,7 @@ _REFRESH_DELIVERY_GRACE = timedelta(minutes=10)
 _pending_refresh_delivery: dict[str, tuple[str, datetime]] = {}
 
 
-def mint_tokens_for_binding_code(binding_code_row: dict[str, Any]) -> tuple[str, str | None, int]:
+def mint_tokens_for_binding_code(binding_code_row: dict[str, Any]) -> tuple[str, str | None, int, str]:
     """端點③首次核銷時現場簽發:Access 每次重簽,Refresh 只在尚未寫入時生成一次。
 
     Refresh Token 明文不落地(僅雜湊寫入 device_binding),但為了讓「DB 已寫入雜湊、
@@ -284,7 +284,7 @@ def mint_tokens_for_binding_code(binding_code_row: dict[str, Any]) -> tuple[str,
         if cached and cached[1] > now:
             refresh_token = cached[0]
 
-    return access_token, refresh_token, expires_in
+    return access_token, refresh_token, expires_in, device_binding["id_token"]
 
 
 def get_current_device_binding(authorization: str | None = Header(default=None)) -> dict[str, Any]:
