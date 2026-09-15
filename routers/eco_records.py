@@ -40,30 +40,35 @@ class EmissionFactorUpdate(BaseModel):
     valid_from: date | None = None
 
 
+# 差旅稽核確認送出的最終欄位（context v28 §4.1 [D2]）。
+# co2e_kg／factor_id 一律由後端計算,不接受 client 指定(同 [A3]／[D5]「關鍵計算量 client 不直寫」)；
+# 實際計算與 entry_source 標記為後續實作(§4.1 [D2](5) preview 端點),此處先鎖定輸入欄位形狀,
+# 故 co2e_kg 於計算引擎完成前恆為 null。
+# distance_km 正常情形亦由後端計算覆寫,僅 TDX／Maps 換算失敗(degraded)時作為人工填寫 fallback 採用。
 class TravelRecordCreate(BaseModel):
-    factor_id: UUID | None = None
-    track_type: str | None = Field(default=None, examples=["manual"])
-    transport_mode: str = Field(..., examples=["mrt"])
+    transport_mode: str = Field(
+        ...,
+        examples=["高鐵電子票"],
+        description="票據類型：高鐵電子票／App乘車截圖／計程車紙本收據／其他",
+    )
+    travel_date: date
     origin: str | None = None
     destination: str | None = None
-    travel_date: date
-    amount: float | None = None
-    distance_km: float | None = None
-    co2e_kg: float | None = None
+    amount: float = Field(..., examples=[700])
+    distance_km: float | None = Field(
+        default=None, description="僅 degraded fallback 時之人工填寫值"
+    )
     receipt_id: str | None = None
     status: str = "pending"
 
 
 class TravelRecordUpdate(BaseModel):
-    factor_id: UUID | None = None
-    track_type: str | None = None
     transport_mode: str | None = None
+    travel_date: date | None = None
     origin: str | None = None
     destination: str | None = None
-    travel_date: date | None = None
     amount: float | None = None
     distance_km: float | None = None
-    co2e_kg: float | None = None
     receipt_id: str | None = None
     status: str | None = None
 
