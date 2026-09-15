@@ -57,6 +57,7 @@ class BindingCodeTokenResponse(BaseModel):
     refresh_token: str | None = None
     token_type: str = "bearer"
     expires_in: int | None = None
+    id_token: str | None = None
 
 
 class AgentTokenRefreshRequest(BaseModel):
@@ -171,12 +172,13 @@ def get_binding_code_token(
     if binding_code["status"] == "pending":
         return BindingCodeTokenResponse(status="pending")
 
-    access_token, refresh_token, expires_in = mint_tokens_for_binding_code(binding_code)
+    access_token, refresh_token, expires_in, id_token = mint_tokens_for_binding_code(binding_code)
     return BindingCodeTokenResponse(
         status="consumed",
         access_token=access_token,
         refresh_token=refresh_token,
         expires_in=expires_in,
+        id_token=id_token,
     )
 
 
