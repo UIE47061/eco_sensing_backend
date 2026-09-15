@@ -187,6 +187,66 @@ Content-Type: application/json
 
 ---
 
+## 7. 開發步驟表
+
+> 依 §0 現況（僅落地 `TravelRecordCreate`/`TravelRecordUpdate` 輸入欄位形狀）排出後續開發順序。**本文件僅將第 1、2、5 項展開為可執行的細部步驟**；第 3、4 項屬 OCR／NER／外部 API 計算引擎範疇，僅列大項以標示順序與依賴關係，細節開發步驟不在本文件範圍（見文末「附註」）。
+>
+> 狀態標記：⬜ 未開始　🔄 進行中　✅ 已完成　🚧 阻塞／待決策
+
+### 7.1 建立 `POST /api/travel-records/preview`（對應 §5）
+
+| # | 步驟 | 對應章節／檔案 | 狀態 |
+| --- | ------ | ------ | ------ |
+| 1.1 | 定義 `TravelRecordPreviewRequest`（`origin`／`destination`／`transport_mode`／`travel_date`）與 `TravelRecordPreviewResponse`（`distance_km`／`co2e_kg`／`factor_id`／`degraded`）兩個 Pydantic model | `routers/eco_records.py` | ⬜ |
+| 1.2 | 新增路由 `POST /api/travel-records/preview`，掛 `Depends(get_current_employee)`；僅驗證身分，**不**寫入 `employee_id`、不落庫 | `routers/eco_records.py` | ⬜ |
+| 1.3 | 里程／碳排計算暫以 stub 串接（回傳 `null` + `"degraded": true`），待 7.3／7.4（項目 3、4）完成後替換為真實計算，避免 preview 端點被計算引擎進度卡住 | 新增 `services/travel_estimate.py`（暫定） | ⬜ |
+| 1.4 | 實作 degraded 邏輯：TDX／Maps 查無結果時回 `HTTP 200` + 空值 + `degraded: true`，**不得**回 4xx/5xx（§5 定案） | 同上 | ⬜ |
+| 1.5 | 撰寫測試：401（缺 Bearer）、200 正常、200 degraded、422（缺必填欄位） | `tests/` | ⬜ |
+| 1.6 | 回填本文件 §5 的「尚未實作」註記與 §2 端點總覽 | 本文件 | ⬜ |
+
+### 7.2 App 上傳圖片／照片：初步回饋（確認 Request／Response 2xx／4xx／5xx）
+
+> 目的：先把「拍照上傳」這段 I/O 契約釘死，讓 App 端可以先對接，OCR／NER 邏輯（7.3／7.4）之後再接上，不阻塞前端開發。
+
+| # | 步驟 | 對應章節／檔案 | 狀態 |
+| --- | ------ | ------ | ------ |
+| 2.1 | 與 App 端確認上傳端點路徑與方法（例如 `POST /api/travel-records/scan`，`multipart/form-data`），並確認是否與 7.1 的 `preview` 端點合併或分離 | 待與 App 端對齊，回填 §2 端點總覽 | ⬜ |
+| 2.2 | 定義 Request：欄位名稱（如 `file`）、允許的 content-type（`image/jpeg`／`image/png`／`application/pdf`？）、檔案大小上限 | 新路由 | ⬜ |
+| 2.3 | 定義 Response 2xx：初步回饋 payload 形狀（例如 `{ "upload_id": ..., "status": "received" }`），**此階段不含 OCR 結果**，OCR 結果待 7.3／7.4 完成後再補欄位 | 新路由 | ⬜ |
+| 2.4 | 定義 4xx：`400`（檔案格式不符）、`401`（缺／過期 Bearer，沿用 `get_current_employee` 既有錯誤形狀）、`413`（檔案過大）、`422`（缺 multipart 欄位） | 新路由 | ⬜ |
+| 2.5 | 定義 5xx：`500`（暫存／上傳寫入失敗）；決定是否需要重試或非同步處理旗標 | 新路由 | ⬜ |
+| 2.6 | 決定原始圖片暫存位置（如 Supabase Storage bucket）與存取權限；確認是否需要 `employee_id` 隔離路徑 | `db/supabase.py` 或新 storage 服務 | ⬜ |
+| 2.7 | 撰寫測試：覆蓋 2xx／400／401／413／422／500 各狀況 | `tests/` | ⬜ |
+| 2.8 | 回填本文件（新增「App 圖片上傳」章節，比照 §3 格式列出 Request/Response/錯誤表） | 本文件 | ⬜ |
+
+### 7.3 建置 OpenCV、Tesseract OCR
+
+| # | 步驟 | 對應章節／檔案 | 狀態 |
+| --- | ------ | ------ | ------ |
+| 3.1 | 評估 OpenCV 前處理（去雜訊／校正傾斜／裁切票據區域）與 Tesseract OCR 辨識管線 | 屬計算引擎範疇，細節不在本文件範圍 | ⬜ |
+| 3.2 | 決定 OCR 產出如何餵給 7.2 的上傳結果（同步回傳 or 非同步 callback/polling） | 待與 7.2 Response 形狀整合 | ⬜ |
+
+### 7.4 串接 GPT-4o NER、TDX／Maps
+
+| # | 步驟 | 對應章節／檔案 | 狀態 |
+| --- | ------ | ------ | ------ |
+| 4.1 | 以 GPT-4o 對 OCR 文字做 NER，抽出 `origin`／`destination`／`travel_date`／`amount` 等結構化欄位 | 屬計算引擎範疇，細節不在本文件範圍 | ⬜ |
+| 4.2 | 串接 TDX／Google Maps 換算里程，並接回 7.1 的 `services/travel_estimate.py` stub，取代暫時的 degraded-only 回傳 | 同上 | ⬜ |
+
+### 7.5 解決 `DELETE /api/travel-records/{record_id}` 不需 Bearer 的處理方式（對應 §6）
+
+| # | 步驟 | 對應章節／檔案 | 狀態 |
+| --- | ------ | ------ | ------ |
+| 5.1 | `delete_travel_record` 補上 `Depends(get_current_employee)`，比照 `update_travel_record` 的寫法 | `routers/eco_records.py:227-229` | ⬜ |
+| 5.2 | 加入擁有者檢查：刪除前先以 `get_record("travel_record", record_id)` 取出 `employee_id`，與 token 解出的 `employee_id` 不符則回 `403` | `routers/eco_records.py`／`services/crud.py` | ⬜ |
+| 5.3 | 確認系統是否有「管理者可刪任意紀錄」的角色需求；目前 `employee` 表無角色欄位，若無則不處理，若有則需回頭核對 v28 §4.1 決議範圍 | 待與 context 文件核對，🚧 待決策 | ⬜ |
+| 5.4 | 一併檢視 `GET /api/travel-records`（list 不過濾）、`GET /api/travel-records/{record_id}` 是否同屬本次修補範圍，或維持現況列為獨立 P1 項目（見 §6） | 待決策，範疇可能超出本次「DELETE」子題 | 🚧 |
+| 5.5 | 更新錯誤情況表：新增 `401`（缺 Bearer，沿用既有形狀）、`403`（非擁有者） | 本文件 §3／新增 §7.5 對應小節 | ⬜ |
+| 5.6 | 撰寫測試：無 Bearer → 401；帶他人 token 刪除非本人紀錄 → 403；本人刪除 → 200 | `tests/` | ⬜ |
+| 5.7 | 回填本文件 §2 端點總覽「認證」欄與 §6 現況提醒（移除已解決項目） | 本文件 | ⬜ |
+
+---
+
 ## 附註：不屬本文件範圍
 
 - OCR／GPT-4o NER／TDX 里程查詢／Google Maps 換算的實作細節：屬後端計算引擎（尚未實作），非本端點契約現況範圍。
