@@ -73,16 +73,6 @@ class TravelRecordUpdate(BaseModel):
     status: str | None = None
 
 
-class WasteBinCreate(BaseModel):
-    qr_code: str = Field(..., examples=["BIN-001"])
-    location: str | None = Field(default=None, examples=["1F pantry"])
-
-
-class WasteBinUpdate(BaseModel):
-    qr_code: str | None = None
-    location: str | None = None
-
-
 class DeviceCreate(BaseModel):
     type: str = Field(..., examples=["camera"])
     status: str = Field(default="active", examples=["active"])
@@ -93,46 +83,6 @@ class DeviceUpdate(BaseModel):
     type: str | None = None
     status: str | None = None
     last_seen: datetime | None = None
-
-
-class WasteSessionCreate(BaseModel):
-    bin_id: UUID
-    scan_at: datetime | None = None
-    confirm_at: datetime | None = None
-    status: str = "open"
-    lock_held: bool = False
-
-
-class WasteSessionUpdate(BaseModel):
-    bin_id: UUID | None = None
-    scan_at: datetime | None = None
-    confirm_at: datetime | None = None
-    status: str | None = None
-    lock_held: bool | None = None
-
-
-class WasteEventCreate(BaseModel):
-    bin_id: UUID
-    session_id: UUID | None = None
-    device_id: UUID | None = None
-    factor_id: UUID | None = None
-    event_at: datetime | None = None
-    waste_type: str = Field(..., examples=["paper"])
-    confidence: float | None = Field(default=None, examples=[0.98])
-    weight_g: float | None = Field(default=None, examples=[120.5])
-    co2e_kg: float | None = None
-
-
-class WasteEventUpdate(BaseModel):
-    bin_id: UUID | None = None
-    session_id: UUID | None = None
-    device_id: UUID | None = None
-    factor_id: UUID | None = None
-    event_at: datetime | None = None
-    waste_type: str | None = None
-    confidence: float | None = None
-    weight_g: float | None = None
-    co2e_kg: float | None = None
 
 
 class ElevatorTripCreate(BaseModel):
@@ -229,31 +179,6 @@ def delete_travel_record(record_id: UUID) -> dict[str, Any]:
     return delete_record("travel_record", record_id)
 
 
-@router.get("/waste-bins")
-def list_waste_bins(limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
-    return list_records("waste_bin", limit=limit, offset=offset)
-
-
-@router.post("/waste-bins", status_code=201)
-def create_waste_bin(payload: WasteBinCreate) -> dict[str, Any]:
-    return create_record("waste_bin", dump_payload(payload))
-
-
-@router.get("/waste-bins/{record_id}")
-def get_waste_bin(record_id: UUID) -> dict[str, Any]:
-    return get_record("waste_bin", record_id)
-
-
-@router.patch("/waste-bins/{record_id}")
-def update_waste_bin(record_id: UUID, payload: WasteBinUpdate) -> dict[str, Any]:
-    return update_record("waste_bin", record_id, dump_payload(payload))
-
-
-@router.delete("/waste-bins/{record_id}")
-def delete_waste_bin(record_id: UUID) -> dict[str, Any]:
-    return delete_record("waste_bin", record_id)
-
-
 @router.get("/devices")
 def list_devices(limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
     return list_records("device", limit=limit, offset=offset)
@@ -277,65 +202,6 @@ def update_device(record_id: UUID, payload: DeviceUpdate) -> dict[str, Any]:
 @router.delete("/devices/{record_id}")
 def delete_device(record_id: UUID) -> dict[str, Any]:
     return delete_record("device", record_id)
-
-
-@router.get("/waste-sessions")
-def list_waste_sessions(limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
-    return list_records("waste_session", limit=limit, offset=offset)
-
-
-@router.post("/waste-sessions", status_code=201)
-def create_waste_session(
-    payload: WasteSessionCreate,
-    employee_id: UUID = Depends(get_current_employee),
-) -> dict[str, Any]:
-    data = dump_payload(payload)
-    data["employee_id"] = str(employee_id)
-    return create_record("waste_session", data)
-
-
-@router.get("/waste-sessions/{record_id}")
-def get_waste_session(record_id: UUID) -> dict[str, Any]:
-    return get_record("waste_session", record_id)
-
-
-@router.patch("/waste-sessions/{record_id}")
-def update_waste_session(
-    record_id: UUID,
-    payload: WasteSessionUpdate,
-    _: UUID = Depends(get_current_employee),
-) -> dict[str, Any]:
-    return update_record("waste_session", record_id, dump_payload(payload))
-
-
-@router.delete("/waste-sessions/{record_id}")
-def delete_waste_session(record_id: UUID) -> dict[str, Any]:
-    return delete_record("waste_session", record_id)
-
-
-@router.get("/waste-events")
-def list_waste_events(limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
-    return list_records("waste_event", limit=limit, offset=offset)
-
-
-@router.post("/waste-events", status_code=201)
-def create_waste_event(payload: WasteEventCreate) -> dict[str, Any]:
-    return create_record("waste_event", dump_payload(payload))
-
-
-@router.get("/waste-events/{record_id}")
-def get_waste_event(record_id: UUID) -> dict[str, Any]:
-    return get_record("waste_event", record_id)
-
-
-@router.patch("/waste-events/{record_id}")
-def update_waste_event(record_id: UUID, payload: WasteEventUpdate) -> dict[str, Any]:
-    return update_record("waste_event", record_id, dump_payload(payload))
-
-
-@router.delete("/waste-events/{record_id}")
-def delete_waste_event(record_id: UUID) -> dict[str, Any]:
-    return delete_record("waste_event", record_id)
 
 
 @router.get("/elevator-trips")
