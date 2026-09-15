@@ -1,0 +1,221 @@
+erDiagram
+  COMPANY ||--o{ DEPARTMENT : has
+  DEPARTMENT ||--o{ EMPLOYEE : contains
+  EMPLOYEE ||--o{ TRAVEL_RECORD : submits
+  EMPLOYEE ||--o{ WASTE_SESSION : opens
+  EMPLOYEE ||--o{ ELEVATOR_TRIP : takes
+  EMPLOYEE ||--o{ DIGITAL_USAGE : generates
+  EMPLOYEE ||--o{ DEVICE_BINDING : enrolls
+  EMPLOYEE ||--o{ APP_SESSION : authenticates
+  DEVICE ||--o{ DEVICE_BINDING : bound_as
+  DEVICE ||--o{ BINDING_CODE : requests
+  EMPLOYEE ||--o{ BINDING_CODE : consumes
+  DEVICE_BINDING ||--o| BINDING_CODE : issued_from
+  WASTE_BIN ||--o{ WASTE_SESSION : scanned_in
+  WASTE_BIN ||--o{ WASTE_EVENT : receives
+  WASTE_SESSION ||--o{ WASTE_EVENT : pairs
+  DEVICE ||--o{ WASTE_EVENT : emits
+  DEVICE ||--o{ DIGITAL_USAGE : reports
+  EMISSION_FACTOR ||--o{ TRAVEL_RECORD : applies
+  EMISSION_FACTOR ||--o{ WASTE_EVENT : applies
+  EMISSION_FACTOR ||--o{ ELEVATOR_TRIP : applies
+  EMISSION_FACTOR ||--o{ DIGITAL_USAGE : applies
+  BINS ||--o{ TRASH_SESSIONS : scanned_in
+  TRASH_SESSIONS ||--o{ TRASH_RAW_DATA : produces
+  EMPLOYEE {
+    uuid id PK
+    uuid department_id FK
+    string display_name
+    string email UK
+    int level
+    int carbon_coin
+    string password_hash "nullable"
+    timestamptz created_at
+    timestamptz updated_at
+  }
+  DEPARTMENT {
+    uuid id PK
+    uuid company_id FK
+    string name
+    string primary_metric "nullable"
+    timestamptz created_at
+    timestamptz updated_at
+  }
+  COMPANY {
+    uuid id PK
+    string name
+    int baseline_year "nullable"
+    int net_zero_year "nullable"
+    timestamptz created_at
+    timestamptz updated_at
+  }
+  TRAVEL_RECORD {
+    uuid id PK
+    uuid employee_id FK
+    uuid factor_id FK "nullable"
+    string track_type "nullable"
+    string transport_mode
+    string origin "nullable"
+    string destination "nullable"
+    date travel_date
+    numeric amount "nullable"
+    numeric distance_km "nullable"
+    numeric co2e_kg "nullable"
+    string receipt_id "nullable"
+    string entry_source "v27 4.1[D2] ai/ai_edited/manual; DB 尚未 migrate"
+    string status
+    timestamptz created_at
+    timestamptz updated_at
+  }
+  WASTE_SESSION {
+    uuid id PK
+    uuid employee_id FK
+    uuid bin_id FK
+    timestamptz scan_at
+    timestamptz confirm_at "nullable"
+    string status
+    bool lock_held
+    timestamptz created_at
+    timestamptz updated_at
+  }
+  WASTE_EVENT {
+    uuid id PK
+    uuid bin_id FK
+    uuid session_id FK "nullable"
+    uuid device_id FK "nullable"
+    uuid factor_id FK "nullable"
+    timestamptz event_at
+    string waste_type
+    numeric confidence "nullable"
+    numeric weight_g "nullable"
+    numeric co2e_kg "nullable"
+    timestamptz created_at
+    timestamptz updated_at
+  }
+  WASTE_BIN {
+    uuid id PK
+    string qr_code UK
+    string location "nullable"
+    timestamptz created_at
+    timestamptz updated_at
+  }
+  DEVICE {
+    uuid id PK
+    string type
+    string status
+    timestamptz last_seen "nullable"
+    string display_name "nullable"
+    timestamptz created_at
+    timestamptz updated_at
+  }
+  ELEVATOR_TRIP {
+    uuid id PK
+    uuid employee_id FK
+    uuid factor_id FK "nullable"
+    timestamptz ts_in
+    timestamptz ts_out "nullable"
+    int floor_in
+    int floor_out
+    int floor_delta "nullable"
+    string direction "nullable"
+    numeric co2e_kg "nullable"
+    timestamptz created_at
+    timestamptz updated_at
+  }
+  DIGITAL_USAGE {
+    uuid id PK
+    uuid employee_id FK
+    uuid device_id FK "nullable"
+    uuid factor_id FK "nullable"
+    date usage_date
+    string path_type
+    string sensing_mode
+    timestamptz collected_at
+    numeric pc_active_hours "nullable"
+    numeric pc_idle_hours "nullable"
+    numeric pc_avg_cpu_util "nullable"
+    string cpu_model "nullable"
+    string printer_serial "nullable"
+    int printer_page_counter "nullable"
+    bool printer_identity_unknown
+    int print_pages "nullable"
+    numeric drive_usage_gb "nullable"
+    numeric drive_trash_gb "nullable"
+    numeric co2e_kg "nullable"
+    timestamptz created_at
+    timestamptz updated_at
+  }
+  BINDING_CODE {
+    uuid id PK
+    string code UK
+    uuid device_id FK
+    uuid employee_id FK "nullable"
+    uuid device_binding_id FK "nullable"
+    string status
+    string device_secret_hash "nullable"
+    timestamptz expires_at
+    timestamptz consumed_at "nullable"
+    timestamptz created_at
+    timestamptz updated_at
+  }
+  DEVICE_BINDING {
+    uuid id PK
+    uuid employee_id FK
+    uuid device_id FK
+    string id_token "nullable"
+    string status
+    string refresh_token_hash "nullable"
+    timestamptz bound_at
+    timestamptz last_seen "nullable"
+    timestamptz revoked_at "nullable"
+    timestamptz created_at
+    timestamptz updated_at
+  }
+  APP_SESSION {
+    uuid id PK
+    uuid employee_id FK
+    string refresh_token_hash
+    string status
+    timestamptz created_at
+    timestamptz expires_at
+    timestamptz last_used_at "nullable"
+    timestamptz revoked_at "nullable"
+  }
+  EMISSION_FACTOR {
+    uuid id PK
+    string category
+    string key
+    numeric value
+    string unit
+    string source "nullable"
+    date valid_from
+    timestamptz created_at
+    timestamptz updated_at
+  }
+  BINS {
+    uuid id PK
+    string name
+    string location "nullable"
+    string status
+    timestamptz created_at
+  }
+  TRASH_SESSIONS {
+    uuid id PK
+    uuid user_id FK "nullable"
+    uuid bin_id FK
+    string status
+    string trash_type "nullable"
+    float weight "nullable"
+    float carbon "nullable"
+    timestamptz created_at
+    timestamptz completed_at "nullable"
+  }
+  TRASH_RAW_DATA {
+    uuid id PK
+    uuid session_id FK
+    float raw_weight "nullable"
+    string image_url "nullable"
+    jsonb ai_raw_result "nullable"
+    jsonb sensor_data "nullable"
+    timestamptz created_at
+  }
