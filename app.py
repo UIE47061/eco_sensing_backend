@@ -10,7 +10,7 @@ from fastapi.openapi.utils import get_openapi
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
 from db.pool import close_pool, create_pool
-from routers import agent, auth, eco_records, organizations, supabase_test, trash
+from routers import agent, auth, digital_usage_manual, organizations, supabase_test, trash, travel_records
 from util.config import Env
 
 security = HTTPBasic()
@@ -115,7 +115,8 @@ def health_check() -> dict[str, object]:
 app.include_router(supabase_test.router)
 app.include_router(auth.router)
 app.include_router(organizations.router)
-app.include_router(eco_records.router)
+app.include_router(travel_records.router)
+app.include_router(digital_usage_manual.router)
 app.include_router(agent.router)
 app.include_router(trash.router)
 

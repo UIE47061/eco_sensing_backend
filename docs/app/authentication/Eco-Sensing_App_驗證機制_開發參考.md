@@ -191,18 +191,16 @@ App 端對這兩種 401 的處理相同：清除本機憑證（含 secure storag
 
 - Access 過期或簽章/格式錯誤 → 一律 `401`，`detail` 為 `"Access token expired"` 或 `"Invalid access token"`，並帶 `WWW-Authenticate: Bearer` header。App 攔截器**不需解析 detail 文字差異**，見到 `401` 即觸發「換發＋重放原請求」（§3.4）。
 - 缺 `Authorization` header → `401 Missing bearer token`。
-- P1 範圍內、App 會以 Bearer 呼叫的四個寫入端點（`employee_id` 皆由後端從 token 解出並自動寫入，**App body 絕不帶 `employee_id`**，對應 §2 鐵律）：
+- **2026-09-16 更正**：`eco_records.py` 已拆分並瘦身——`waste-bins`／`waste-sessions`／`waste-events`／`emission-factors`／`devices`／`elevator-trips` 六個端點已整組移除（廢棄物辨識改由 `routers/trash.py` 的新流程負責，其餘目前無實作、亦無專屬 router）；差旅端點搬到 `routers/travel_records.py`；原檔更名為 `routers/digital_usage_manual.py`，只保留手動上傳用紙量端點。下表同步更新為現況：
 
   | 端點 | 對應模組 | Request body 必要欄位（其餘見程式碼為選填） |
   | ------ | ---------- | ---------------------------------------------- |
   | `POST /api/travel-records` | 差旅 | `transport_mode`、`travel_date` |
-  | `POST /api/waste-sessions` | 廢棄物 session | `bin_id` |
-  | `POST /api/elevator-trips` | 電梯 | `ts_in`、`floor_in`、`floor_out` |
   | `POST /api/digital-usages` | 用紙量手動上傳 | `usage_date`、`print_pages`（≥0） |
 
-  > 完整欄位（含選填）以 `routers/eco_records.py` 對應 Pydantic model（`TravelRecordCreate` / `WasteSessionCreate` / `ElevatorTripCreate` / `DigitalUsageCreate`）為準，此處僅列 App 端必填。`/digital-usages` 為同員工同日的「後蓋前」語意：同一天重複上傳採更新既有紀錄，但若重送的 `collected_at` 比既有紀錄舊則不覆蓋（見程式碼註解 [D16]）。GET/PATCH/DELETE 端點供資料回顯與修正，非 A1–A6 這一輪主要範圍。
+  > 完整欄位（含選填）以對應 router 的 Pydantic model 為準：`TravelRecordCreate` 見 `routers/travel_records.py`，`DigitalUsageCreate` 見 `routers/digital_usage_manual.py`。`/digital-usages` 為同員工同日的「後蓋前」語意：同一天重複上傳採更新既有紀錄，但若重送的 `collected_at` 比既有紀錄舊則不覆蓋（見程式碼註解 [D16]）。GET/PATCH/DELETE 端點供資料回顯與修正，非 A1–A6 這一輪主要範圍。
   >
-  > `waste-bins`／`devices`／`waste-events` 三端點不掛 `get_current_employee`（由感測裝置／Eco-Agent 側寫入，非員工歸戶動作），App 工作區本次不需呼叫。
+  > 廢棄物歸戶（原 `POST /api/waste-sessions`）與電梯（原 `POST /api/elevator-trips`）**目前沒有可用端點**：廢棄物走 `routers/trash.py`（尚無 employee 歸戶邏輯，見另案追蹤）；電梯模組尚未有替代實作。App 工作區若要接這兩塊，需先跟後端確認新端點形狀，不可沿用本文件曾列出的舊路徑。
 
 ---
 

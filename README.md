@@ -7,9 +7,12 @@ FastAPI backend project using routers.
 ```text
 app.py
 routers/
-  eco_records.py
+  agent.py
+  digital_usage_manual.py
   organizations.py
   supabase_test.py
+  trash.py
+  travel_records.py
 services/
   crud.py
   supabase_test.py
@@ -68,12 +71,8 @@ Open:
 - Companies: http://127.0.0.1:8000/api/companies
 - Departments: http://127.0.0.1:8000/api/departments
 - Employees: http://127.0.0.1:8000/api/employees
-- Emission factors: http://127.0.0.1:8000/api/emission-factors
 - Travel records: http://127.0.0.1:8000/api/travel-records
-- Waste bins: http://127.0.0.1:8000/api/waste-bins
-- Devices: http://127.0.0.1:8000/api/devices
-- Waste sessions: http://127.0.0.1:8000/api/waste-sessions
-- Waste events: http://127.0.0.1:8000/api/waste-events
-- Elevator trips: http://127.0.0.1:8000/api/elevator-trips
-- Digital usages: http://127.0.0.1:8000/api/digital-usages
+- Digital usages (manual upload): http://127.0.0.1:8000/api/digital-usages
+- Eco-Agent (auto sensing): http://127.0.0.1:8000/api/agent
+- Trash (waste recognition): http://127.0.0.1:8000/trash
 - Supabase test: http://127.0.0.1:8000/api/supabase/test

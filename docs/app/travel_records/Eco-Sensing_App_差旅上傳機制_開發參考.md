@@ -1,7 +1,8 @@
 # Eco-Sensing App 差旅（travel-records）上傳機制 — 開發參考
 
 > 目的：彙整 **App 端（Flutter 員工端）** 開發「差旅碳核算上傳」所需的 API 形狀，供實作對齊。
-> 權威出處：`Eco-Sensing_專案context文件_v28.md` §4.1（規格、[D2] 稽核流程與 preview 端點決議）、§5.1（`travel-records` 端點清單）、§8.1（App 掃描頁規格）；App 端收據確認對話框欄位：`docs/app/receipt_confirmation_fields_0915.md`；程式碼出處：`routers/eco_records.py`、`db/schema.sql`。
+> 權威出處：`Eco-Sensing_專案context文件_v28.md` §4.1（規格、[D2] 稽核流程與 preview 端點決議）、§5.1（`travel-records` 端點清單）、§8.1（App 掃描頁規格）；App 端收據確認對話框欄位：`docs/app/receipt_confirmation_fields_0915.md`；程式碼出處：`routers/travel_records.py`、`db/schema.sql`。
+> **2026-09-16 更正**：差旅端點已從原本集中式的 `routers/eco_records.py`（已刪除，該檔已改為 `routers/digital_usage_manual.py`，僅剩手動上傳用紙量端點）拆分為專屬的 `routers/travel_records.py`；本文件下方所有指向 `routers/eco_records.py` 的程式碼出處請一律改讀 `routers/travel_records.py`。未來 OCR／NER／preview 等差旅計算邏輯也會建在這個專屬 router（與對應的 `services/travel_estimate.py` 等）之下，不會再回到 eco_records。
 > 認證機制細節（登入、雙 token、401 攔截器）不重述，見 `Eco-Sensing_App_驗證機制_開發參考.md`；本文件假設 App 已持有有效 `access_token`。
 
 ---
@@ -63,7 +64,7 @@ Authorization: Bearer <access_token>
 Content-Type: application/json
 ```
 
-### Request Body（對應 `TravelRecordCreate`，`routers/eco_records.py`）
+### Request Body（對應 `TravelRecordCreate`，`routers/travel_records.py`）
 
 | 欄位 | 型別 | 必填 | 說明 |
 | ------ | ------ | ------ | ------ |
@@ -183,7 +184,7 @@ Content-Type: application/json
 - **本次未落地項目**（見 §0）：OCR／NER 管線、`preview` 試算端點、里程/碳排後端自動計算、`entry_source` 寫入邏輯。App 端目前仍需自行完成里程換算並帶值於 `distance_km`；`co2e_kg` 恆回 `null`。
 - **GET/DELETE 端點目前未掛 `get_current_employee`**，即不需 Bearer 也可呼叫，且 `GET /api/travel-records` 列表**不會依呼叫者過濾**，會回所有員工的紀錄；`DELETE` 亦無擁有者檢查，任何人可刪任意紀錄（v28 §5.1 已列為 P1 待補項目）。App 端「我的差旅紀錄」列表暫時需自行以回傳的 `employee_id` 過濾。
 - `status` 欄位**無資料庫 enum 約束、無狀態機**（`db/schema.sql` 僅 `text not null default 'pending'`），App 若要用它驅動 UI，需與後端另行約定允許值。
-- 完整欄位與型別以 `routers/eco_records.py` 的 `TravelRecordCreate` / `TravelRecordUpdate`（Pydantic model）為準，本文件為求可讀性做了摘要，異動時請重新核對程式碼。
+- 完整欄位與型別以 `routers/travel_records.py` 的 `TravelRecordCreate` / `TravelRecordUpdate`（Pydantic model）為準，本文件為求可讀性做了摘要，異動時請重新核對程式碼。
 
 ---
 
@@ -197,8 +198,8 @@ Content-Type: application/json
 
 | # | 步驟 | 對應章節／檔案 | 狀態 |
 | --- | ------ | ------ | ------ |
-| 1.1 | 定義 `TravelRecordPreviewRequest`（`origin`／`destination`／`transport_mode`／`travel_date`）與 `TravelRecordPreviewResponse`（`distance_km`／`co2e_kg`／`factor_id`／`degraded`）兩個 Pydantic model | `routers/eco_records.py` | ⬜ |
-| 1.2 | 新增路由 `POST /api/travel-records/preview`，掛 `Depends(get_current_employee)`；僅驗證身分，**不**寫入 `employee_id`、不落庫 | `routers/eco_records.py` | ⬜ |
+| 1.1 | 定義 `TravelRecordPreviewRequest`（`origin`／`destination`／`transport_mode`／`travel_date`）與 `TravelRecordPreviewResponse`（`distance_km`／`co2e_kg`／`factor_id`／`degraded`）兩個 Pydantic model | `routers/travel_records.py` | ⬜ |
+| 1.2 | 新增路由 `POST /api/travel-records/preview`，掛 `Depends(get_current_employee)`；僅驗證身分，**不**寫入 `employee_id`、不落庫 | `routers/travel_records.py` | ⬜ |
 | 1.3 | 里程／碳排計算暫以 stub 串接（回傳 `null` + `"degraded": true`），待 7.3／7.4（項目 3、4）完成後替換為真實計算，避免 preview 端點被計算引擎進度卡住 | 新增 `services/travel_estimate.py`（暫定） | ⬜ |
 | 1.4 | 實作 degraded 邏輯：TDX／Maps 查無結果時回 `HTTP 200` + 空值 + `degraded: true`，**不得**回 4xx/5xx（§5 定案） | 同上 | ⬜ |
 | 1.5 | 撰寫測試：401（缺 Bearer）、200 正常、200 degraded、422（缺必填欄位） | `tests/` | ⬜ |
@@ -237,8 +238,8 @@ Content-Type: application/json
 
 | # | 步驟 | 對應章節／檔案 | 狀態 |
 | --- | ------ | ------ | ------ |
-| 5.1 | `delete_travel_record` 補上 `Depends(get_current_employee)`，比照 `update_travel_record` 的寫法 | `routers/eco_records.py:227-229` | ⬜ |
-| 5.2 | 加入擁有者檢查：刪除前先以 `get_record("travel_record", record_id)` 取出 `employee_id`，與 token 解出的 `employee_id` 不符則回 `403` | `routers/eco_records.py`／`services/crud.py` | ⬜ |
+| 5.1 | `delete_travel_record` 補上 `Depends(get_current_employee)`，比照 `update_travel_record` 的寫法 | `routers/travel_records.py:81-82` | ⬜ |
+| 5.2 | 加入擁有者檢查：刪除前先以 `get_record("travel_record", record_id)` 取出 `employee_id`，與 token 解出的 `employee_id` 不符則回 `403` | `routers/travel_records.py`／`services/crud.py` | ⬜ |
 | 5.3 | 確認系統是否有「管理者可刪任意紀錄」的角色需求；目前 `employee` 表無角色欄位，若無則不處理，若有則需回頭核對 v28 §4.1 決議範圍 | 待與 context 文件核對，🚧 待決策 | ⬜ |
 | 5.4 | 一併檢視 `GET /api/travel-records`（list 不過濾）、`GET /api/travel-records/{record_id}` 是否同屬本次修補範圍，或維持現況列為獨立 P1 項目（見 §6） | 待決策，範疇可能超出本次「DELETE」子題 | 🚧 |
 | 5.5 | 更新錯誤情況表：新增 `401`（缺 Bearer，沿用既有形狀）、`403`（非擁有者） | 本文件 §3／新增 §7.5 對應小節 | ⬜ |
